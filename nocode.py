@@ -1,4 +1,5 @@
 # APP 
+from matplotlib.collections import LineCollection, PolyCollection
 import streamlit as st
 
 # Data Wranling
@@ -10,18 +11,21 @@ from collections import Counter
 # Data Visualisation
 import seaborn as sns
 import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
+from statsmodels.graphics.tsaplots import plot_acf
 import plotly.io as pio
 import wordcloud
 from wordcloud import WordCloud, STOPWORDS, ImageColorGenerator
 from PIL import Image
 from matplotlib_venn_wordcloud import venn2_wordcloud
+from highlight_text import HighlightText, ax_text, fig_text
 
 # NLP
 from bertopic import BERTopic
 import spacy
 import nltk
 from nltk.corpus import stopwords
-from spacytextblob.spacytextblob import SpacyTextBlob
+from textblob import TextBlob
 
 # Load Spacy
 nlp = spacy.load('en_core_web_trf')
@@ -82,8 +86,8 @@ def clean_df(df: pd.DataFrame):
 
 df = clean_df(df)
 
+st.subheader('Preview of upload')
 st.write(df.head(10))
-
 
 @st.cache(allow_output_mutation=True)
 def get_topic_model(df):
@@ -105,7 +109,91 @@ def get_topic_map(topic_model):
 # st.write(fig1)
 
 
+# SENTIMENT
+st.header('Sentiment Analysis')
+st.markdown(
+    """
+Searches with no sentiment expressed (i.e. **Neutral**) are removed from the analysis, leaving just the relative weight of positive and negative searches. 
+""")
+
+def sentiment_calc(text):
+    return TextBlob(text).polarity
+
+# Assign Sentiment
+df['score'] = df[searches].apply(sentiment_calc)
+df['sentiment'] = pd.cut(df['score'], bins=[-1, -0.2, 0.2, 1],labels=['Negative', 'Neutral', 'Positive'])
+
+@st.cache(allow_output_mutation=True)
+def sentiment_plot(df, offset='W-Mon'):
+    # Typography and Colour 
+    font = {'family' : 'Yahoo Sans', 'weight':'normal'}
+    plt.rc('font', **font)
+    sent_colors = {'Negative':'#E0E4E9', 'Neutral':'Grey', 'Positive':'#1AC567'}
+
+    fig, ax = plt.subplots(figsize=(5,3))
+
+    (df
+    .set_index('date')                      
+    .sort_index()                           
+    .groupby(['sentiment'])['score']           
+    .resample(offset)                       
+    .sum()                                  
+    .reset_index()
+    .assign(pct=lambda df_:df_['score'] / df_['score'].sum() * 100)
+    .pivot_table(index='date', columns='sentiment', values='pct', aggfunc='sum')
+    .drop('Neutral', axis=1)
+    .plot.area(color=sent_colors, legend=False, lw=0, ax=ax))
+    
+    # Axes
+    ax.set(xlabel="")
+    ax.set_ylabel('% of total sentiment', fontsize=6)
+    ax.axhline(y=0, color='grey', zorder=10, lw=0.4)
+    ax.tick_params(axis='both', which='both', bottom=False, left=False, labelsize=5)
+
+    # Title
+    s = 'Aggregate weight of <Positive> and <Negative> sentiment in searches'
+    fig_text(0.05, 0.9, s, fontweight='bold', fontsize=10, va='bottom', highlight_textprops=[{"color": "#1AC567", "fontweight":'bold'},
+                                                                        {"color": "#E0E4E9", "fontweight":"bold"}])
+
+    # Aesthetics
+    for direction in ['bottom', 'left']:
+        ax.spines[direction].set_lw(0.2)
+        ax.spines[direction].set_color('grey')
+        ax.spines[direction].set_alpha(0.5)
+    sns.despine(left=True, bottom=True)
+
+    plt.savefig('sentiment.png', dpi=1000, transparent=True)
+
+    return fig
+
+# Date Aggregation Selection
+def format_func(option):
+    return CHOICES[option]
+
+CHOICES = {'M':'Month', 'W-MON':'Week', 'Q':'Quarter', 'D':'Day', 'SM':'Bi-Week', 'B':'Business Day'}
+offset = st.selectbox(label='Select Date Aggregation', options=list(CHOICES.keys()), format_func=format_func)
+
+# Plot Sentiment
+fig_sent = sentiment_plot(df, offset=offset)
+st.pyplot(fig_sent, dpi=1000)
+
+# Download Button
+with open("sentiment.png", "rb") as file:
+    btn = st.download_button(
+        label="Download chart",
+        data=file,
+        file_name="sentiment.png",
+        mime="image/png")
+
+
+# ---------------
+
 # QUESTIONS
+st.header('Questions')
+st.markdown("""
+Any searches from your upload that contain questions are filtered here.  
+It provides a sense of what people are researching or are unsure of.  
+""")
 # CSS to inject contained in a string
 hide_dataframe_row_index = """
             <style>
@@ -116,7 +204,6 @@ hide_dataframe_row_index = """
 
 # Inject CSS with Markdown
 st.markdown(hide_dataframe_row_index, unsafe_allow_html=True)
-
 
 df_questions['length'] = df_questions[searches].str.len()
 df_questions[searches] = df_questions[searches].str.replace('_', ' ').str.replace(r'(co.uk|www.|http://|\d| amp|&amp|(\S{14,}))', '').str.strip().str.replace('  ', ' ').str.lower()
@@ -129,30 +216,15 @@ st.dataframe(df_questions
         .head(40)
         .filter(like='query'), width=800, height=600)
 
+# ---------------
+# WORDCLOUD
 
-
-# WORD CLOUD
-st.subheader('WORDCLOUD')
-
-# Demographic Selection
-ages = df[age].unique().tolist()
-genders = df[gender].unique().tolist()
-parts = ['ADJ', 'NOUN', 'VERB', 'PRON']
-
-# User Selectable Configuration
-with st.form(key='wordkey'):
-    age_selection = st.multiselect('Select Age', ages, default=ages)
-    gender_selection = st.multiselect('Select Gender', genders, default=genders)
-    parts_option = st.multiselect(label='Select Part of Speech', options= parts, default=['NOUN'])
-    st.form_submit_button('Submit Choices') 
-
-
-
-# Aesthetics
-font = {'family' : 'Yahoo Sans',
-        'weight' : 'bold'}
-plt.rc('font', **font)
-
+st.header('Parts of Speech')
+st.markdown("""
+Every word in the upload is analysed for it's part-of-speech, or role within the sentence. You can use the filters to pick out Nouns, Adjectives, Verbs or Pronouns, as well as layer in demographic profiles. 
+By default all searches are included, but you can specify a demographic using the filters below. 
+Any **stopwords** specified in the left hand navigation will apply to the WordCloud, so use this to remove unwanted words from the image. 
+""")
 # Colour format 
 def purple(word=None, font_size=None,
                        position=None, orientation=None,
@@ -162,30 +234,60 @@ def purple(word=None, font_size=None,
     l = random_state.randint(50, 80) # 0 - 100
     return "hsl({}, {}%, {}%)".format(h, s, l)
 
+def create_wordcloud(df):
+    # Aesthetics
+    font = {'family' : 'Yahoo Sans', 'weight' : 'bold'}
+    plt.rc('font', **font)
 
-df_words = df.copy()
+    # Create spaCy document and tokenise 
+    doc = nlp(" ".join(df.query('age in @age_selection and gender in @gender_selection')[searches].to_list()))
+    tokens = [token.text for token in doc if not token.is_stop and not token.is_punct and token.pos_ in parts_option]
+    tokens = Counter(tokens)
 
-# Create spaCy document and tokenise 
-doc = nlp(" ".join(df_words.query('age in @age_selection and gender in @gender_selection')[searches].to_list()))
-tokens = [token.text for token in doc if not token.is_stop and not token.is_punct and token.pos_ in parts_option]
-tokens = Counter(tokens)
-clean_words = {key:value for key, value in Counter(tokens).items()}
-
-# Instantiate wordcloud object
-wc = WordCloud(background_color='white', 
+    # Instantiate wordcloud object
+    wc = WordCloud(background_color='white', 
                color_func=purple,
                collocations=True,
                max_words=200,
-               width=1200, height=1000, prefer_horizontal=0.9
-)
+               width=1200, height=1000, prefer_horizontal=0.9)
 
-wc = wc.generate_from_frequencies(tokens)
-fig, ax = plt.subplots(figsize=(8,8))
-ax.imshow(wc, interpolation='bilinear')
-plt.axis('off')
-st.pyplot(fig)
+    wc = wc.generate_from_frequencies(tokens)
+    fig, ax = plt.subplots(figsize=(8,8))
+    ax.imshow(wc, interpolation='bilinear')
+    plt.axis('off')
+    plt.savefig('wordcloud.png', dpi=1000, transparent=True)
+    return fig
 
-# WORDCLOUD VENN
+# # Create copy of dataframe for use in wordcloud
+# df_words = df.copy()
+
+# # Demographic Selection
+# ages = df[age].unique().tolist()
+# genders = df[gender].unique().tolist()
+# parts = ['ADJ', 'NOUN', 'VERB', 'PRON']
+
+# # User Selectable Configuration
+# with st.form(key='wordkey1'):
+#     age_selection = st.multiselect('Select Age', ages, default=ages)
+#     gender_selection = st.multiselect('Select Gender', genders, default=genders)
+#     parts_option = st.multiselect(label='Select Part of Speech', options= parts, default=['NOUN'])
+#     st.form_submit_button('Submit Choices') 
+
+# # Plot Wordcloud
+# fig_wordcloud = create_wordcloud(df_words)
+# st.pyplot(fig_wordcloud, dpi=1000)
+
+# # Download Button
+# with open("wordcloud.png", "rb") as file:
+#     btn = st.download_button(
+#         label="Download wordcloud",
+#         data=file,
+#         file_name="wordcloud.png",
+#         mime="image/png")
+
+#-------------------
+
+# // TODO WORDCLOUD VENN 
 # st.subheader('WordCloud Venn')
 
 # # User Selectable Configuration
@@ -223,7 +325,87 @@ st.pyplot(fig)
 # fig, ax = plt.subplots(figsize=(8,8))
 # st.pyplot(venn2_wordcloud(sets), ax=ax)
 
-st.subheader('Sentiment Analysis')
-st.header('TIME SERIES ANALYSIS')
-st.subheader('Day of Week Impact')
-st.subheader('Holiday and Custom Date Impact')
+
+st.header('Topic Model') #// TODO Topic model
+st.header('Dendrogram') #// TODO Dendrogram
+st.header('Topics by Age') #// TODO Topic by age
+st.header('Topics by Gender') #// TODO Topic by gender
+st.header('Topics by Time') #// TODO Topic by Time
+st.header('Aspect or Search Intent') # // TODO Aspect or search intent
+st.header('Entity Recognition') #// TODO NER
+st.header('Number of Words') # // TODO number of words
+st.header('Day of Week Impact') #//TODO Topic Day impact
+st.header('Time Series Decomposition') # // TODO Decomposition
+st.header('Holiday and Custom Date Impact') #// TODO Holiday impact 
+
+# AUTO CORRELATION
+st.header('Autocorrelation') #// TODO Autocorrelation
+st.markdown("""These plots graphically summarise the strength of a relationship between any given day and that of a day at prior time steps (lags).
+
+An autocorrelation of **1** represents a perfect positive correlation, while **-1** represents a perfect negative correlation.
+The purple shaded area is the 95% confidence interval - anything within here shows no significant correlation.""")
+
+def autocorr_plot(ser, days=50):
+    font = {'family' : 'Yahoo Sans', 'weight':'regular'}
+    plt.rc('font', **font)
+
+    fig, ax = plt.subplots(figsize=(5,3))
+    daily_queries = df.groupby(date).size()
+    plot_acf(x=daily_queries, 
+             lags=days, 
+             ax=ax, 
+             use_vlines=True,
+             missing='conservative',
+             zero=False,
+             auto_ylims=True,
+             title="",
+             vlines_kwargs={"colors": "#7E1FFF"})
+    
+    for item in ax.collections:
+        if type(item)==PolyCollection:
+            item.set_facecolor('#7E1FFF') #7E1FFF
+
+        if type(item)==LineCollection:
+            item.set_facecolor('#7E1FFF')
+    
+    for item in ax.lines:
+        item.set_color('#7E1FFF')
+
+ 
+    # Axes
+    ax.set_xlabel("Days Lag", fontweight='bold', fontsize=8)
+    ax.set_ylabel('Correlation', fontweight='bold', fontsize=8)
+    ax.tick_params(axis='both', which='both', bottom=False, left=False, labelsize=8)
+    # Title
+    s = 'Autocorrelation of searches'
+    fig_text(0.05, 0.95, s, fontweight='bold', fontsize=14, va='bottom', color='#6001D2')
+
+    # Aesthetics
+    for direction in ['bottom', 'left']:
+        ax.spines[direction].set_lw(0.2)
+        ax.spines[direction].set_color('grey')
+        ax.spines[direction].set_alpha(0.5)
+    sns.despine()
+        
+    
+    plt.savefig('autocorr.png', dpi=1000, transparent=True)
+    return fig
+
+# Plot Autocorrelation
+days = st.slider(label='Number of days', min_value=10, max_value=370, step=10, value=50, format='%d', help='mailto:jamie.nathan@yahooinc')
+fig_autocorr = autocorr_plot(df[date], days=days)
+st.pyplot(fig_autocorr, dpi=1000)
+
+# Download Button
+with open("autocorr.png", "rb") as file:
+    btn = st.download_button(
+        label="Download autocorrelation chart",
+        data=file,
+        file_name="autocorr.png",
+        mime="image/png")
+
+
+
+st.header('Emotion') #// TODO Emotion 
+
+
