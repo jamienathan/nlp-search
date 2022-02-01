@@ -8,11 +8,15 @@ import pandas as pd
 import re
 from collections import Counter
 
+# Time Series
+from prophet import Prophet
+from statsmodels.graphics.tsaplots import plot_acf
+
+
 # Data Visualisation
 import seaborn as sns
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
-from statsmodels.graphics.tsaplots import plot_acf
 import plotly.io as pio
 import wordcloud
 from wordcloud import WordCloud, STOPWORDS, ImageColorGenerator
@@ -64,6 +68,7 @@ stopwords = stopwords.words('english')
 stopwords.extend(custom_stopwords.split())
 
 # CLEAN UPLOADED FILE
+@st.experimental_memo
 def clean_df(df: pd.DataFrame):
     """
     Returns
@@ -86,10 +91,14 @@ def clean_df(df: pd.DataFrame):
 
 df = clean_df(df)
 
+# Get start and end dates for sourcing
+research_start = df[date].dt.date.min().strftime('%-d %b %Y')
+research_end = df[date].dt.date.max().strftime('%-d %b %Y')
+
 st.subheader('Preview of upload')
 st.write(df.head(10))
 
-@st.cache(allow_output_mutation=True)
+@st.experimental_memo
 def get_topic_model(df):
     topic_model = BERTopic(
                     n_gram_range=(1,2), 
@@ -99,7 +108,7 @@ def get_topic_model(df):
     topics, topics = topic_model.fit_transform(df[searches].to_list())
     return topic_model, topics
 
-@st.cache(allow_output_mutation=True)
+@st.experimental_memo
 def get_topic_map(topic_model):
     return topic_model.visualize_topics()
 
@@ -108,7 +117,7 @@ def get_topic_map(topic_model):
 # fig1 = get_topic_map(topic_model)
 # st.write(fig1)
 
-
+# ------------------------
 # SENTIMENT
 st.header('Sentiment Analysis')
 st.markdown(
@@ -123,14 +132,14 @@ def sentiment_calc(text):
 df['score'] = df[searches].apply(sentiment_calc)
 df['sentiment'] = pd.cut(df['score'], bins=[-1, -0.2, 0.2, 1],labels=['Negative', 'Neutral', 'Positive'])
 
-@st.cache(allow_output_mutation=True)
+@st.experimental_memo(persist='disk')
 def sentiment_plot(df, offset='W-Mon'):
     # Typography and Colour 
     font = {'family' : 'Yahoo Sans', 'weight':'normal'}
     plt.rc('font', **font)
     sent_colors = {'Negative':'#E0E4E9', 'Neutral':'Grey', 'Positive':'#1AC567'}
 
-    fig, ax = plt.subplots(figsize=(5,3))
+    fig, ax = plt.subplots(figsize=(6,3))
 
     (df
     .set_index('date')                      
@@ -152,8 +161,11 @@ def sentiment_plot(df, offset='W-Mon'):
 
     # Title
     s = 'Aggregate weight of <Positive> and <Negative> sentiment in searches'
-    fig_text(0.05, 0.9, s, fontweight='bold', fontsize=10, va='bottom', highlight_textprops=[{"color": "#1AC567", "fontweight":'bold'},
+    fig_text(0.05, 0.9, s, fontweight='bold', fontsize=12, va='bottom', highlight_textprops=[{"color": "#1AC567", "fontweight":'bold'},
                                                                         {"color": "#E0E4E9", "fontweight":"bold"}])
+
+    # Caption
+    fig.supxlabel(f'Source: Yahoo Internal (country) \nData covers {research_start} - {research_end}', fontsize=4, x=0.9, y=-0.05, ha='right')
 
     # Aesthetics
     for direction in ['bottom', 'left']:
@@ -234,6 +246,7 @@ def purple(word=None, font_size=None,
     l = random_state.randint(50, 80) # 0 - 100
     return "hsl({}, {}%, {}%)".format(h, s, l)
 
+@st.experimental_memo(persist='disk')
 def create_wordcloud(df):
     # Aesthetics
     font = {'family' : 'Yahoo Sans', 'weight' : 'bold'}
@@ -258,32 +271,32 @@ def create_wordcloud(df):
     plt.savefig('wordcloud.png', dpi=1000, transparent=True)
     return fig
 
-# # Create copy of dataframe for use in wordcloud
-# df_words = df.copy()
+# Create copy of dataframe for use in wordcloud
+df_words = df.copy()
 
-# # Demographic Selection
-# ages = df[age].unique().tolist()
-# genders = df[gender].unique().tolist()
-# parts = ['ADJ', 'NOUN', 'VERB', 'PRON']
+# Demographic Selection
+ages = df[age].unique().tolist()
+genders = df[gender].unique().tolist()
+parts = ['ADJ', 'NOUN', 'VERB', 'PRON']
 
-# # User Selectable Configuration
-# with st.form(key='wordkey1'):
-#     age_selection = st.multiselect('Select Age', ages, default=ages)
-#     gender_selection = st.multiselect('Select Gender', genders, default=genders)
-#     parts_option = st.multiselect(label='Select Part of Speech', options= parts, default=['NOUN'])
-#     st.form_submit_button('Submit Choices') 
+# User Selectable Configuration
+with st.form(key='wordkey1'):
+    age_selection = st.multiselect('Select Age', ages, default=ages)
+    gender_selection = st.multiselect('Select Gender', genders, default=genders)
+    parts_option = st.multiselect(label='Select Part of Speech', options= parts, default=['NOUN'])
+    st.form_submit_button('Submit Choices') 
 
-# # Plot Wordcloud
-# fig_wordcloud = create_wordcloud(df_words)
-# st.pyplot(fig_wordcloud, dpi=1000)
+# Plot Wordcloud
+fig_wordcloud = create_wordcloud(df_words)
+st.pyplot(fig_wordcloud, dpi=1000)
 
-# # Download Button
-# with open("wordcloud.png", "rb") as file:
-#     btn = st.download_button(
-#         label="Download wordcloud",
-#         data=file,
-#         file_name="wordcloud.png",
-#         mime="image/png")
+# Download Button
+with open("wordcloud.png", "rb") as file:
+    btn = st.download_button(
+        label="Download wordcloud",
+        data=file,
+        file_name="wordcloud.png",
+        mime="image/png")
 
 #-------------------
 
@@ -333,11 +346,241 @@ st.header('Topics by Gender') #// TODO Topic by gender
 st.header('Topics by Time') #// TODO Topic by Time
 st.header('Aspect or Search Intent') # // TODO Aspect or search intent
 st.header('Entity Recognition') #// TODO NER
-st.header('Number of Words') # // TODO number of words
-st.header('Day of Week Impact') #//TODO Topic Day impact
-st.header('Time Series Decomposition') # // TODO Decomposition
-st.header('Holiday and Custom Date Impact') #// TODO Holiday impact 
 
+# -----------------------------------------
+# TIME SERIES DECOMPOSITION
+st.header('Time Series Decomposition') # // TODO Decomposition
+st.markdown("""These plots show the lift in searches for given days of the week, public holidays and custom dates. 
+This is done by decomposing the provided data into three compontents (trend, seasonality & noise) to better understand patterns in the data. """)
+
+
+def research_dates(df):
+    return (df[date].dt.date.min().strftime('%-d %b %Y'), df[date].dt.date.max().strftime('%-d %b %Y'))
+
+
+def is_spring_summer(ds):
+    dt = pd.to_datetime(ds)
+    return dt.quarter == 2 | dt.quarter == 3
+
+holidays = pd.read_csv('raw data/custom_holidays.csv')
+holidays['ds'] = pd.to_datetime(holidays['ds'], format='%d/%m/%Y')
+
+def format_func_country(option):
+    return COUNTRY_CHOICES[option]
+
+st.subheader('Holiday and Custom Date Impact') #// TODO Holiday impact 
+COUNTRY_CHOICES = {'UK':'UnitedKingdom', 'US': 'UnitedStates', 'AU':'Australia', 'AO': 'Angola', 'AR': 'Argentina', 'AW': 'Aruba', 'AT': 'Austria', 'AZ': 'Azerbaijan', 'BD': 'Bangladesh', 'BY': 'Belarus', 'BE': 'Belgium', 'BW': 'Botswana', 'BR': 'Brazil', 'BG': 'Bulgaria', 'BI': 'Burundi', 'CA': 'Canada', 'CL': 'Chile', 'CN': 'China', 'CO': 'Colombia', 'HR': 'Croatia', 'CW': 'Curacao', 'CZ': 'Czechia', 'DK': 'Denmark', 'DJ': 'Djibouti', 'DO': 'DominicanRepublic', 'EG': 'Egypt', 'EE': 'Estonia', 'ET': 'Ethiopia', 'ECB': 'EuropeanCentralBank', 'FI': 'Finland', 'FR': 'France', 'GE': 'Georgia', 'DE': 'Germany', 'GR': 'Greece', 'HN': 'Honduras', 'HK': 'HongKong', 'HU': 'Hungary', 'IS': 'Iceland', 'IN': 'India', 'IE': 'Ireland', 'IL': 'Israel', 'IT': 'Italy', 'JM': 'Jamaica', 'JP': 'Japan', 'KZ': 'Kazakhstan', 'KE': 'Kenya', 'KR': 'Korea', 'LV': 'Latvia', 'LS': 'Lesotho', 'LT': 'Lithuania', 'LU': 'Luxembourg', 'MY': 'Malaysia', 'MW': 'Malawi', 'MX': 'Mexico', 'MA': 'Morocco', 'MZ': 'Mozambique', 'NL': 'Netherlands', 'NA': 'Namibia', 'NZ': 'NewZealand', 'NI': 'Nicaragua', 'NG': 'Nigeria', 'MK': 'NorthMacedonia', 'NO': 'Norway', 'PY': 'Paraguay', 'PE': 'Peru', 'PL': 'Poland', 'PT': 'Portugal', 'PTE': 'PortugalExt', 'RO': 'Romania', 'RU': 'Russia', 'SA': 'SaudiArabia', 'RS': 'Serbia', 'SG': 'Singapore', 'SK': 'Slovakia', 'SI': 'Slovenia', 'ZA': 'SouthAfrica', 'ES': 'Spain', 'SZ': 'Swaziland', 'SE': 'Sweden', 'CH': 'Switzerland', 'TW': 'Taiwan', 'TR': 'Turkey', 'TN': 'Tunisia', 'UA': 'Ukraine', 'AE': 'UnitedArabEmirates', 'VE': 'Venezuela', 'VN': 'Vietnam', 'ZM': 'Zambia', 'ZW': 'Zimbabwe'}
+country = st.selectbox(label='Select Holidays', options=list(COUNTRY_CHOICES.keys()), format_func=format_func_country)
+
+with st.form("Enter Custom Date"):
+    custom_name = st.text_input(label='Give the day you want to measure a name? i.e. Superbowl/CL Final')
+    custom_date = st.date_input(label='What date was it on?')
+    submitted = st.form_submit_button("Submit")
+
+
+
+df_prophet = (df
+                .groupby(date, as_index=False).size()
+                .rename({date:'ds', 'size':'y'}, axis='columns')
+                .sort_values('ds')
+                .assign(autumn_winter=lambda df:~df['ds'].apply(is_spring_summer),
+                        spring_summer=lambda df:df['ds'].apply(is_spring_summer)))
+
+# Instantiate
+m = Prophet(holidays=holidays, weekly_seasonality=False)
+
+# Configure & Fit 
+m.add_country_holidays(country_name=country) 
+m.add_seasonality(name='weekly_springsummer', period=7, fourier_order=3, condition_name='spring_summer')
+m.add_seasonality(name='weekly_autumnwinter', period=7, fourier_order=3, condition_name='autumn_winter')
+m.fit(df_prophet)
+
+# Predict
+future = m.make_future_dataframe(periods=30)
+future['autumn_winter'] = ~future['ds'].apply(is_spring_summer)
+future['spring_summer'] = future['ds'].apply(is_spring_summer)
+
+forecast = m.predict(future)
+cols = ['ds', 'holidays', 'weekly_springsummer', 'weekly_autumnwinter', 'yhat']
+df_seasonality = (pd.concat([forecast[cols], df_prophet['y']], axis='columns')
+                    .dropna()
+                    .assign(holiday_impact=lambda df: df['holidays'] / df['y'],
+                                      ss_weeklyimpact=lambda df: df['weekly_springsummer'] / df['y'],
+                                      aw_weeklyimpact=lambda df: df['weekly_autumnwinter'] / df['y'],
+                                      dayofweek=lambda df: df['ds'].dt.day_name(),
+                                      weekday=lambda df: df['ds'].dt.dayofweek))
+
+
+def holiday_cleanup(ser):
+    return (ser.str.replace('[England/Wales/Northern Ireland]', '', regex=False)
+               .str.replace(' [Northern Ireland]', '', regex=False)
+    )
+
+df_holidays = (m.construct_holiday_dataframe(df_seasonality['ds'])
+                .assign(holiday=lambda df: holiday_cleanup(df['holiday']))
+                .set_index('ds'))
+
+# holiday_impact = pd.concat([df_seasonality.set_index('ds'), df_holidays], axis='columns', join='inner').reset_index()
+
+cols = ['ds', 'holidays', 'holiday_impact', 'yhat', 'y']
+
+holiday_impact = (pd.concat([df_seasonality[cols].set_index('ds'), df_holidays], axis='columns')
+                    .reset_index()
+                    .query('holidays != 0')
+                    .dropna(subset=['holidays'])
+                    .fillna(''))
+
+scot = holiday_impact['holiday'].str.contains("Scotland")
+
+holiday_impact = holiday_impact.loc[~scot]
+
+
+research_start, research_end = research_dates(df)
+
+holiday_options = holiday_impact['holiday'].to_list()
+holiday_selected = st.multiselect('Select & Deselect Holidays To Show In Chart', options=holiday_options, default=holiday_options)
+
+
+
+@st.experimental_memo(persist='disk')
+def holiday_impact_plot(df):
+    fig, ax = plt.subplots(figsize=(6,3), dpi=1000)
+
+    sns.set(font='Yahoo Sans', style='white')
+    df['holiday_impact'] = df['holiday_impact'] * 100
+    df.query('holiday in @holiday_selected').plot(x='holiday', y='holiday_impact', color=df['holiday_impact'].ge(0).map({True: '#7E1FFF', False:'lightgrey'}), kind='barh', width=1, ax=ax)
+
+    # Labels
+    ax.set_ylabel('')
+    ax.set_xlabel('% lift in searches', fontsize=6, fontweight='bold')
+    ax.tick_params(axis='both', which='both', bottom=False, top=False, left=False, labelsize=5, pad=0)
+
+    # Spines
+    sns.despine(left=True, bottom=False)
+
+    for direction in ['bottom', 'left']:
+        ax.spines[direction].set_lw(0.2)
+        ax.spines[direction].set_color('grey')
+        ax.spines[direction].set_alpha(0.5)
+    
+    ax.grid(which='major', axis='x', dashes=(1,3), zorder=4, color='gray', ls=':', alpha=0.5, lw=0.2)
+    ax.grid(axis='y', visible=False)
+    # ax.axvline(0, lw=0.2, color='black')
+    # Title
+    s = '% Lift in Searches by Holiday & Event'
+    s2 = 'The chart shows the <Positive> and <Negative> impact on searches during holidays' 
+    fig_text(0.00, 0.92, s, fontweight='bold', fontsize=12, va='bottom',  color='#6001D2')
+
+    fig_text(0.00, 0.89, s2, fontsize=6, va='bottom', highlight_textprops=[{"color": "#7E1FFF", "fontweight":'bold'},
+                                                                            {"color": "grey", "fontweight":"bold"}])
+
+    # Adjust axes positions to fit commentary
+    pos1 = ax.get_position() # get the original position 
+    pos2 = [pos1.x0, pos1.y0 - 0.05,  pos1.width, pos1.height]
+    ax.set_position(pos2)
+
+    # Source
+    fig.supxlabel(f'Source: Yahoo Internal {country} \nData covers {research_start} - {research_end}', fontsize=4, x=0.9, y=-0.05, ha='right')
+    ax.get_legend().remove()
+    plt.savefig('holiday_impact.png', dpi=1000, transparent=True)
+
+    return fig
+
+# Plot Holiday Impact
+fig_holiday = holiday_impact_plot(holiday_impact)
+st.pyplot(fig_holiday, dpi=1000)
+
+# Download Button
+with open("holiday_impact.png", "rb") as file:
+    btn = st.download_button(
+        label="Download holiday impact chart",
+        data=file,
+        file_name="holiday_impact.png",
+        mime="image/png")
+
+st.subheader('Day of Week Impact')
+st.markdown("""Conditional seasonality is used to split **A/W** and **S/S** as behaviours tend to differ in each.  Taking the average over the course of a year hides these differences.""")
+
+@st.experimental_memo(persist='disk')
+def weekly_impact_plot(df):
+        days = [ 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+        
+        weekly_impact = (df_seasonality
+                    .groupby('dayofweek')
+                    .agg(ss=('weekly_springsummer', 'sum'),
+                         aw=('weekly_autumnwinter', 'sum'),
+                         pred=('yhat', 'sum'))
+                    .reindex(days)
+                    .assign(ss_impact=lambda df: df['ss'] / df['pred'] * 100,
+                            aw_impact=lambda df: df['aw'] / df['pred'] * 100)
+                    .reset_index())
+                    
+        seasonal_impact = (weekly_impact.melt(id_vars='dayofweek', var_name='season', value_vars=['ss_impact', 'aw_impact'], value_name='impact'))  
+
+        sns.set(font='Yahoo Sans', style='white')
+        fig, ax = plt.subplots(figsize=(6,3), dpi=1000)
+        sns.barplot(x='dayofweek', y='impact', hue='season', palette=['#7E1FFF', 'lightgrey'], lw=0, ec='black', data=seasonal_impact, ax=ax);
+
+        # Labels
+        ax.xaxis.set_ticks_position('top')
+        ax.set_xlabel('')
+        ax.set_ylabel('% lift in searches', fontsize=6, fontweight='bold')
+        ax.tick_params(axis='x', which='both', bottom=False, top=False, left=False, labelsize=5, labeltop=True, pad=-10)
+        ax.tick_params(axis='y', which='both', bottom=False, top=False, left=False, labelsize=5, labeltop=True, pad=0)
+        yticks = ax.get_yticks()
+
+        # Spines
+        sns.despine(left=True, bottom=True)
+
+        for direction in ['bottom', 'left']:
+                ax.spines[direction].set_lw(0.2)
+                ax.spines[direction].set_color('grey')
+                ax.spines[direction].set_alpha(0.5)
+
+        ax.grid(which='major', axis='y', dashes=(1,3), zorder=4, color='gray', ls=':', alpha=0.5, lw=0.2)
+        ax.grid(axis='x', visible=False)
+
+        # Title
+        s = '% Lift in Searches by Day of Week'
+        s2 = 'The chart shows weekday impact during the <Spring/Summer> and <Autumn/Winter> after accounting for public holidays' 
+        fig_text(0.05, 0.92, s, fontweight='bold', fontsize=12, va='bottom',  color='#6001D2')
+
+        fig_text(0.05, 0.89, s2, fontsize=6, va='bottom', highlight_textprops=[{"color": "#7E1FFF", "fontweight":'bold'},
+                                                                                {"color": "lightgrey", "fontweight":"bold"}])
+
+        
+        # Caption
+        fig.supxlabel(f'Source: Yahoo Internal {country} \nData covers {research_start} - {research_end}', fontsize=4, x=0.9, ha='right')
+
+        # Custom Grouping Aesthetics
+        for day in range(7):
+                ax.plot([day - 0.45, day + 0.45], [yticks[-1], yticks[-1]], color='black', lw=0.5)
+
+        ax.get_legend().remove()
+
+        # Adjust axes positions to fit commentary
+        pos1 = ax.get_position() # get the original position 
+        pos2 = [pos1.x0, pos1.y0 - 0.05,  pos1.width, pos1.height]
+        ax.set_position(pos2)
+
+        plt.savefig('weekly_impact.png', dpi=1000, transparent=True)
+
+        return fig
+
+# Plot Daily Impact
+fig_weekly = weekly_impact_plot(df_seasonality)
+st.pyplot(fig_weekly, dpi=1000)
+
+# Download Button
+with open("weekly_impact.png", "rb") as file:
+    btn = st.download_button(
+        label="Download weekly impact chart",
+        data=file,
+        file_name="weekly_impact.png",
+        mime="image/png")
+
+
+# -----------------------------------------
 # AUTO CORRELATION
 st.header('Autocorrelation') #// TODO Autocorrelation
 st.markdown("""These plots graphically summarise the strength of a relationship between any given day and that of a day at prior time steps (lags).
@@ -345,11 +588,12 @@ st.markdown("""These plots graphically summarise the strength of a relationship 
 An autocorrelation of **1** represents a perfect positive correlation, while **-1** represents a perfect negative correlation.
 The purple shaded area is the 95% confidence interval - anything within here shows no significant correlation.""")
 
+@st.experimental_memo(persist='disk')
 def autocorr_plot(ser, days=50):
     font = {'family' : 'Yahoo Sans', 'weight':'regular'}
     plt.rc('font', **font)
 
-    fig, ax = plt.subplots(figsize=(5,3))
+    fig, ax = plt.subplots(figsize=(6,3))
     daily_queries = df.groupby(date).size()
     plot_acf(x=daily_queries, 
              lags=days, 
@@ -375,10 +619,13 @@ def autocorr_plot(ser, days=50):
     # Axes
     ax.set_xlabel("Days Lag", fontweight='bold', fontsize=8)
     ax.set_ylabel('Correlation', fontweight='bold', fontsize=8)
-    ax.tick_params(axis='both', which='both', bottom=False, left=False, labelsize=8)
+    ax.tick_params(axis='both', which='both', bottom=False, left=False, labelsize=8, pad=0)
     # Title
     s = 'Autocorrelation of searches'
     fig_text(0.05, 0.95, s, fontweight='bold', fontsize=14, va='bottom', color='#6001D2')
+
+    # Caption
+    fig.supxlabel(f'Source: Yahoo Internal {country} \nData covers {research_start} - {research_end}', fontsize=4, x=0.9, y=-0.05, ha='right')
 
     # Aesthetics
     for direction in ['bottom', 'left']:
