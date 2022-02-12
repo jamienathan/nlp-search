@@ -144,17 +144,6 @@ if df is not None:
     # spacy_model = st.sidebar.selectbox("Model name", ["en_core_web_sm", "es_core_news_sm", "pt_core_news_sm"], index=0)
     nlp = load_model(spacy_model)
 
-
-    # st.sidebar.subheader('Jump to:')
-    # st.sidebar.markdown('[Topic Modelling](http://localhost:8502/#topic-model)', unsafe_allow_html=True)
-    # st.sidebar.markdown('[Sentiment Analysis](http://localhost:8502/#sentiment-analysis)', unsafe_allow_html=True)
-    # st.sidebar.markdown('[The Questions](http://localhost:8502/#questions)', unsafe_allow_html=True)
-    # st.sidebar.markdown('[Wordclouds](http://localhost:8502/#parts-of-speech)', unsafe_allow_html=True)
-    # st.sidebar.markdown('[Holiday Impact](http://localhost:8502/#holiday-and-custom-date-impact)', unsafe_allow_html=True)
-    # st.sidebar.markdown('[Day of Week Impact](http://localhost:8502/#day-of-week-impact)', unsafe_allow_html=True)
-    # st.sidebar.markdown('[Autocorrelation](http://localhost:8502/#autocorrelation)', unsafe_allow_html=True)
-    # st.sidebar.markdown('[Demographics](http://localhost:8502/#demographic-profile)', unsafe_allow_html=True)
-
     df['search'] = df['search'].apply(lambda row: ' '.join([word for word in row.split() if word not in (stopwords)]))
 
     # Get start, end dates and sourcing for sourcing
