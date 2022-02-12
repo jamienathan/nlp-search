@@ -6,9 +6,9 @@ dependencies:
   - pip:
     - bertopic==0.9.4
     - cycler==0.11.0
-    - en-core-web-sm==3.2.0
-    - en-core-web-trf==3.2.0
-    - es-core-news-sm==3.2.0
+    - https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.2.0/en_core_web_sm-3.2.0.tar.gz#egg=en_core_web_sm
+    - https://github.com/explosion/spacy-models/releases/download/en_core_web_trf-3.2.0/en_core_web_trf-3.2.0.tar.gz#egg=en_core_web_trf
+    - https://github.com/explosion/spacy-models/releases/download/es_core_news_sm-3.2.0/es_core_news_sm-3.2.0.tar.gz#egg=es_core_news_sm
     - hdbscan==0.8.27
     - highlight-text==0.2
     - holidays==0.11.3.1
@@ -21,7 +21,7 @@ dependencies:
     - pandas==1.3.5
     - plotly==5.5.0
     - prophet==1.0.1
-    - pt-core-news-sm==3.2.0
+    - https://github.com/explosion/spacy-models/releases/download/pt_core_news_sm-3.2.0/pt_core_news_sm-3.2.0.tar.gz#egg=pt_core_news_sm
     - pystan==2.19.1.1
     - scikit-learn==1.0.2
     - scipy==1.7.3
