@@ -35,7 +35,6 @@ from sklearn.metrics.pairwise import cosine_similarity
 import plotly.graph_objects as go
 import plotly.figure_factory as ff
 
-
 # NLP
 import spacy
 import nltk
@@ -45,8 +44,8 @@ from textblob import TextBlob
 from spacy_streamlit import process_text, load_model
 
 
+# PAGE SETUP & AESTHETICS
 
-# Page Setup & Aesthetics
 st.set_page_config(
     page_title='NLP Insights For Search', 
     initial_sidebar_state='expanded',
@@ -62,6 +61,8 @@ for font_file in font_files:
     
 plt.rcParams['font.family'] = 'Yahoo Sans'
 
+
+# FUNCTIONS
 
 # CLEAN UPLOADED FILE
 @st.experimental_memo
@@ -88,91 +89,8 @@ def clean_df(df: pd.DataFrame):
     return df
 
 
-
-# UPLOAD
-st.sidebar.markdown('# Upload data!')
-st.sidebar.markdown('The csv or xls should have a column each for date, the search query, age group and gender')
-uploaded_file = st.sidebar.file_uploader(label='csv only please', type='csv')
-
-# ADD STOPWORDS
-st.sidebar.markdown("""# Stopwords
-Insert any stopwords below. These will be excluded from Topic Modelling & WordCloud analysis.""")
-custom_stopwords = st.sidebar.text_input(label='Separate each word with a space.')
-stopwords = stopwords.words('english')
-stopwords.extend(custom_stopwords.split())
-
-
-# Load default data
-st.subheader('Welcome to the NLP tool. Upload your search data on the left or load a demo dataset to get started')
-
-df = None
- 
-if uploaded_file is not None:
-    st.sidebar.markdown('# Setup')
-    df = pd.read_csv(uploaded_file)
-    cols = df.columns.to_list()
-
-    # Choose Correct Columns
-    search = st.sidebar.selectbox('Which column are your queries in?', cols)
-    date = st.sidebar.selectbox('Which column are your dates in?', cols)
-    age = st.sidebar.selectbox('Which column is age in?', cols)
-    gender = st.sidebar.selectbox('Which column is gender in?', cols)
-    market = st.sidebar.text_input('What market should we source the slides as?')
-
-    df = clean_df(df)
-    df_questions = df.copy()
-        
-
-    
-elif st.button('Load example dataset'):
-    df = pd.read_csv('raw data/demo data.csv')
-    df['date'] = pd.to_datetime(df['date'], format='%d/%m/%Y')
-    df_questions = df.copy()
-    market = 'UK'
-    
-
-if df is not None:
-    # nlp = spacy.load('en_core_web_sm')
-
-    # Model Selection
-    def format_func(option):
-        return SELECTION[option]
-
-    SELECTION = {'en_core_web_sm':'english', 'es_core_news_sm':'spanish', 'pt_core_news_sm':'portuguese'}
-    user_language = st.sidebar.selectbox('Select language for Topic Model', ['english', 'multilingual'], index=0, help='Multilingual provides support for 100+ languages, though will take a little longer to run.')
-    spacy_model = st.sidebar.selectbox('Select language for Wordclouds', options=list(SELECTION.keys()), format_func=format_func, index=0)
-    # spacy_model = st.sidebar.selectbox("Model name", ["en_core_web_sm", "es_core_news_sm", "pt_core_news_sm"], index=0)
-    nlp = load_model(spacy_model)
-
-    df['search'] = df['search'].apply(lambda row: ' '.join([word for word in row.split() if word not in (stopwords)]))
-
-    # Get start, end dates and sourcing for sourcing
-    research_start = df['date'].dt.date.min().strftime('%-d %b %Y')
-    research_end = df['date'].dt.date.max().strftime('%-d %b %Y')
-    timeframe_min = df['date'].dt.date.min()
-    timeframe_max = df['date'].dt.date.min()
-
-    with st.expander(label='Data Preview'):
-        st.subheader('Preview of upload')
-        st.write(df.head(10))
-
-# DEMOGRAPHIC---------------------------------------------------------------------------------------------------
-    
-    st.header('Demographic Profile') 
-
-    # Demographic Selection
-    ages = df.query('age not in ["unknown", "Unknown", "Below13", "13-17"]')['age'].unique().tolist()
-    genders = df.query('gender not in ["unknown", "-1", -1]')['gender'].unique().tolist()
-
-    # User Selectable Configuration
-    with st.expander(label='Configure Chart'):
-        with st.form(key='demokey'):
-            age_selection = st.multiselect('Select Age', ages, default=ages)
-            gender_selection = st.multiselect('Select Gender', genders, default=genders)
-            st.form_submit_button('Submit Choices') 
-
-
-    def demo_barplot(df):
+# DEMO
+def demo_barplot(df):
 
         yahoo_palette_strict = "#39007D #7E1FFF #907CFF #003ABC #0F69FF #7DCBFF #C7CDD2 #828A93".split()
 
@@ -213,69 +131,32 @@ if df is not None:
 
         return fig
 
-
-    # fig_demo = demo_barplot(df)
-    st.pyplot(demo_barplot(df), dpi=600)
-
-    # Download Button
-    with open("images/demo_barplot.png", "rb") as file:
-        btn = st.download_button(
-            label="Download demo slide",
-            data=file,
-            file_name="demo_barplot.png",
-            mime="image/png")
-
-
-
-
-    # TOPIC MODELLING---------------------------------------------------------------------------------------------------
     
-    st.header('Topic Model') #// TODO Topic model
-
-    @st.experimental_memo
-    def get_topic_model(df):
-        df['search'] = df['search'].apply(lambda row: ' '.join([word for word in row.split() if word not in (stopwords)]))
-        topic_model = BERTopic(
-                        language=user_language,
-                        n_gram_range=(1,2), 
-                        nr_topics="auto",
-                        low_memory=True
-                        )
-        topics, probs = topic_model.fit_transform(df['search'].to_list())
-        return topic_model, topics
-
-    topic_model, topics = get_topic_model(df)
-
-    topic_list = topic_model.get_topic_info()
-    topic_list = topic_list.assign(Description=topic_list['Name'].str.split("_", ).str[1:3].str.join(", ")).drop(columns=['Count'])
-
-    with st.expander(label='Show topics'):
-        st.write(topic_list.query('Topic >= 0'))
+# TOPIC MODELLING
+@st.experimental_memo
+def get_topic_model(df):
+    df['search'] = df['search'].apply(lambda row: ' '.join([word for word in row.split() if word not in (stopwords)]))
+    topic_model = BERTopic(
+                    language=user_language,
+                    n_gram_range=(1,2), 
+                    nr_topics="auto",
+                    low_memory=True
+                    )
+    topics, probs = topic_model.fit_transform(df['search'].to_list())
+    return topic_model, topics
 
 
-    @st.experimental_memo
-    def get_topic_map(_topic_model):
-        fig = topic_model.visualize_topics(width=1500, height=700) 
-        fig.update_layout({
-            'plot_bgcolor': 'rgba(0, 0, 0, 0)',
-        })
+@st.experimental_memo
+def get_topic_map(_topic_model):
+    fig = topic_model.visualize_topics(width=1500, height=700) 
+    fig.update_layout({
+        'plot_bgcolor': 'rgba(0, 0, 0, 0)',
+    })
 
-        return fig
-
-    topic_map = get_topic_map(topic_model)
-
-    st.plotly_chart(topic_map)
+    return fig
 
 
-    st.header('Dendrogram') 
-    
-    st.markdown("""The dendrogram provides a way of seeing how the topics can be clustered together when based on **semantic similarity** - i.e they share a lot of words and themes. 
-    The below explanation shows how the topic map directly translates into a dendrogram. """)
-    st.image('images/dendrogram_explanation.png')
-    
-    yahoo_palette_strict = "#6001D2 #FFA700 #1AC567 #0F69FF #FF0080 #11D3CD #C7CDD2 #828A93".split()
-
-    def visualize_hierarchy(topic_model,
+def visualize_hierarchy(topic_model,
                             orientation: str = "left",
                             topics: List[int] = None,
                             top_n_topics: int = None,
@@ -364,133 +245,99 @@ if df is not None:
                                         tickangle=-60))
         return fig
 
-    fig_dendro = visualize_hierarchy(topic_model, orientation='bottom')
-    st.plotly_chart(fig_dendro)
 
 
+@st.experimental_memo
+def topic_facet(searches, topics, timestamps):
+    topic_list = topic_model.get_topic_info()
 
-    st.header('Topics by Age') #// TODO Topic by age
-    st.header('Topics by Gender') #// TODO Topic by gender
+    # Create Dynamic Topic Model and Merge topic names for readability
+    topics_over_time = (topic_model
+                    .topics_over_time(df['search'], topics, timestamps=df['date'])
+                    .query('Topic >= 0')
+                    .sort_values(['Topic', 'Frequency'])
+                    .merge(topic_list[['Topic', 'Name']], how='left', on='Topic')
+                    .assign(Topic=lambda df: df['Topic'].astype(str).str.zfill(2))
+                    .assign(Topic=lambda df: df['Topic'] + " " + df['Name'].str.split('_').str[1:3].str.join(' ')))
 
+    # Resample the data at the monthly level to provide smoother view. Filter just the top 16 topics for performance. 
+    times = (topics_over_time
+            .query('"16" > Topic >= "00"')
+            .groupby(['Name', 'Topic', pd.Grouper(freq='M', key='Timestamp')])
+            .agg(cnt=('Frequency', 'sum'))
+            .fillna(0)
+            .reset_index())
 
-    # st.header('Topics by Time') #// TODO Topic by Time
+    # Sort Topics by count to pass to Facetgrid sort
+    sort_order = times.groupby('Topic', as_index=False).sum('cnt').Topic.to_list()
+    sns.set(font='Yahoo Sans', context='paper', style='white', rc={'figure.figsize':(7,2), 'font.weight':'normal'})
 
-    @st.experimental_memo
-    def topic_facet(searches, topics, timestamps):
-        topic_list = topic_model.get_topic_info()
+    g = sns.relplot(
+        data=times,
+        x="Timestamp", y="cnt", col="Topic",
+        kind="line", color='#6001D2', linewidth=4, zorder=5, col_order=sort_order,
+        col_wrap=4, height=2, aspect=1.5, legend=False, facet_kws={'sharex':True},
+    )
 
-        # Create Dynamic Topic Model and Merge topic names for readability
-        topics_over_time = (topic_model
-                        .topics_over_time(df['search'], topics, timestamps=df['date'])
-                        .query('Topic >= 0')
-                        .sort_values(['Topic', 'Frequency'])
-                        .merge(topic_list[['Topic', 'Name']], how='left', on='Topic')
-                        .assign(Topic=lambda df: df['Topic'].astype(str).str.zfill(2))
-                        .assign(Topic=lambda df: df['Topic'] + " " + df['Name'].str.split('_').str[1:3].str.join(' ')))
+    locator = mdates.AutoDateLocator(minticks=3, maxticks=7)
+    formatter = mdates.ConciseDateFormatter(locator)
 
-        # Resample the data at the monthly level to provide smoother view. Filter just the top 16 topics for performance. 
-        times = (topics_over_time
-                .query('"16" > Topic >= "00"')
-                .groupby(['Name', 'Topic', pd.Grouper(freq='M', key='Timestamp')])
-                .agg(cnt=('Frequency', 'sum'))
-                .fillna(0)
-                .reset_index())
+    for ax in g.axes.flatten():
+        ax.xaxis.set_major_locator(locator)
+        ax.xaxis.set_major_formatter(formatter)
+        for tick in ax.xaxis.get_major_ticks():
+            tick.label1.set_fontweight('bold')
 
-        # Sort Topics by count to pass to Facetgrid sort
-        sort_order = times.groupby('Topic', as_index=False).sum('cnt').Topic.to_list()
-        sns.set(font='Yahoo Sans', context='paper', style='white', rc={'figure.figsize':(7,2), 'font.weight':'normal'})
-    
-        g = sns.relplot(
-            data=times,
-            x="Timestamp", y="cnt", col="Topic",
-            kind="line", color='#6001D2', linewidth=4, zorder=5, col_order=sort_order,
-            col_wrap=4, height=2, aspect=1.5, legend=False, facet_kws={'sharex':True},
+    # Iterate over each subplot to customize further
+    for topic, ax in g.axes_dict.items():
+        sns.set(font='Yahoo Sans', context='talk', style='white', rc={'font.weight':'normal'})
+
+        # Add the title as an annotation within the plot
+        heading = topic[:30] + '..' if len(topic) > 30 else topic
+        ax.text(0, 1, heading.title(), transform=ax.transAxes, fontsize=8, fontweight="bold", fontfamily='Yahoo Sans', color='#6001D2')
+
+        # Plot every year's time series in the background
+        sns.lineplot(
+            data=times, x="Timestamp", y="cnt", units='Topic', 
+            estimator=None, color=".7", linewidth=1, alpha=0.2, ax=ax,
         )
 
-        locator = mdates.AutoDateLocator(minticks=3, maxticks=7)
-        formatter = mdates.ConciseDateFormatter(locator)
+        sns.despine(left=True)
 
-        for ax in g.axes.flatten():
-            ax.xaxis.set_major_locator(locator)
-            ax.xaxis.set_major_formatter(formatter)
-            for tick in ax.xaxis.get_major_ticks():
-                tick.label1.set_fontweight('bold')
+        for direction in ['bottom']:
+            ax.spines[direction].set_lw(0.2)
+            ax.spines[direction].set_color('grey')
+            ax.spines[direction].set_alpha(0.5)
 
-        # Iterate over each subplot to customize further
-        for topic, ax in g.axes_dict.items():
-            sns.set(font='Yahoo Sans', context='talk', style='white', rc={'font.weight':'normal'})
-
-            # Add the title as an annotation within the plot
-            heading = topic[:30] + '..' if len(topic) > 30 else topic
-            ax.text(0, 1, heading.title(), transform=ax.transAxes, fontsize=8, fontweight="bold", fontfamily='Yahoo Sans', color='#6001D2')
-
-            # Plot every year's time series in the background
-            sns.lineplot(
-                data=times, x="Timestamp", y="cnt", units='Topic', 
-                estimator=None, color=".7", linewidth=1, alpha=0.2, ax=ax,
-            )
-
-            sns.despine(left=True)
-
-            for direction in ['bottom']:
-                ax.spines[direction].set_lw(0.2)
-                ax.spines[direction].set_color('grey')
-                ax.spines[direction].set_alpha(0.5)
-
-        # Title
-        g.fig.text(x=0, y=0.93, s='Topic Volumes Over Time', fontweight='extra bold', fontsize=35, va='bottom',  color='#6001D2')
-        fig_text(x=0, y=0.90, s='Each <topic> is plotted against the relative volumes of <other topics> for comparison', fontsize=14, fontweight='normal', va='bottom', highlight_textprops=[{"color": "#6001D2", "fontweight":'bold'},
-                                                                                {"color": "grey", "fontweight":"bold"}])
-            
-        # Sourcing
-        g.fig.supxlabel(f'Source: Yahoo Internal - {market}\nData covers {research_start} - {research_end}', fontsize=8, x=1,y=0, ha='right')
-
-        # Tweak the supporting aspects of the plot
-        ax.set_yticks([])
-        g.set_titles("")
-        g.set_axis_labels("", "Freq.", )
-        g.tight_layout(w_pad=-0)
-        g.fig.subplots_adjust(top=0.85, left=0.05)
-
-        plt.savefig('images/topic_time.png', transparent=True, dpi=1000)
+    # Title
+    g.fig.text(x=0, y=0.93, s='Topic Volumes Over Time', fontweight='extra bold', fontsize=35, va='bottom',  color='#6001D2')
+    fig_text(x=0, y=0.90, s='Each <topic> is plotted against the relative volumes of <other topics> for comparison', fontsize=14, fontweight='normal', va='bottom', highlight_textprops=[{"color": "#6001D2", "fontweight":'bold'},
+                                                                            {"color": "grey", "fontweight":"bold"}])
         
-        return g
+    # Sourcing
+    g.fig.supxlabel(f'Source: Yahoo Internal - {market}\nData covers {research_start} - {research_end}', fontsize=8, x=1,y=0, ha='right')
+
+    # Tweak the supporting aspects of the plot
+    ax.set_yticks([])
+    g.set_titles("")
+    g.set_axis_labels("", "Freq.", )
+    g.tight_layout(w_pad=-0)
+    g.fig.subplots_adjust(top=0.85, left=0.05)
+
+    plt.savefig('images/topic_time.png', transparent=True, dpi=1000)
     
-    # Plot Facet
-    fig_topic_facet = topic_facet(df['search'], topics, df['date'])
-    st.pyplot(fig_topic_facet)
-
-    # Download Button
-    with open("images/topic_time.png", "rb") as file:
-        btn = st.download_button(
-            label="Download slide",
-            data=file,
-            file_name="topic_time.png",
-            mime="image/png")
+    return g
 
 
+# SENTIMENT
 
-
-    # SENTIMENT---------------------------------------------------------------------------------------------------
-
-    st.header('Sentiment Analysis')
-    st.markdown(
-        """
-    Searches with no sentiment expressed (i.e. **Neutral**) are removed from the analysis, leaving just the relative weight of positive and negative searches. 
-    """)
-
-    def sentiment_calc(text):
+def sentiment_calc(text):
         try:
             return TextBlob(text).polarity
         except:
             return None
 
-    # Assign Sentiment
-    df['score'] = df['search'].apply(sentiment_calc)
-    df['sentiment'] = pd.cut(df['score'], bins=[-1, -0.2, 0.2, 1],labels=['Negative', 'Neutral', 'Positive'])
-
-    # @st.experimental_memo()
-    def sentiment_plot(df, offset='W-Mon'):
+def sentiment_plot(df, offset='W-Mon'):
         # Typography and Colour 
         font = {'family' : 'Yahoo Sans', 'weight':'normal'}
         plt.rc('font', **font)
@@ -535,6 +382,438 @@ if df is not None:
 
         return fig
 
+
+# WORDCLOUD
+
+# Colour format 
+def purple(word=None, font_size=None,
+                    position=None, orientation=None,
+                    font_path=None, random_state=None):
+    h = 267 # 0 - 360
+    s = 99 # 0 - 100
+    l = random_state.randint(50, 80) # 0 - 100
+    return "hsl({}, {}%, {}%)".format(h, s, l)
+
+
+# @st.experimental_memo(persist='disk')
+def create_wordcloud(df):
+    # Aesthetics
+    font = {'family' : 'Yahoo Sans', 'weight' : 'bold'}
+    plt.rc('font', **font)
+
+    # Create spaCy document and tokenise 
+    doc = process_text(spacy_model, " ".join(df.query('age in @age_selection and gender in @gender_selection')['search'].to_list()))
+    # doc = nlp(" ".join(df.query('age in @age_selection and gender in @gender_selection')['search'].to_list()))
+    tokens = [token.text for token in doc if not token.is_stop and not token.is_punct and token.pos_ in parts_option]
+    tokens = Counter(tokens)
+
+    # Instantiate wordcloud object
+    wc = WordCloud(background_color='white', 
+            color_func=purple,
+            collocations=True,
+            max_words=200,
+            width=1200, height=1000, prefer_horizontal=0.9)
+
+    wc = wc.generate_from_frequencies(tokens)
+    fig, ax = plt.subplots(figsize=(8,8))
+    ax.imshow(wc, interpolation='bilinear')
+    plt.axis('off')
+    plt.savefig('images/wordcloud.png', dpi=1000, transparent=True)
+    return fig
+
+# VENN 
+
+@st.experimental_memo(persist='disk')
+def venn_intersections(df_words):
+    # Create both circles based on user selection
+    left_venn = df_words.query('gender in @gender_selection1 & age in @age_selection1')
+    right_venn = df_words.query('gender in @gender_selection2 & age in @age_selection2')
+
+    # left spacy doc 
+    doc1 = process_text(spacy_model, " ".join(left_venn['search'].to_list()))
+    left = [token.text.capitalize() for token in doc1 if not token.is_stop and not token.is_punct and token.pos_ in parts_option]
+    left = Counter(left).most_common(40)
+
+    # right spacy doc
+    doc2 = process_text(spacy_model, " ".join(right_venn['search'].to_list()))
+    right = [token.text.capitalize() for token in doc2 if not token.is_stop and not token.is_punct and token.pos_ in parts_option]
+    right = Counter(right).most_common(40)
+    
+    # create data frames 
+    left = pd.DataFrame(left, columns=['search', 'count'])  
+    right = pd.DataFrame(right, columns=['search', 'count'])
+
+    return left, right
+
+
+def venn_cloud(left, right):
+    fig, ax = plt.subplots(figsize=(6,5), dpi=1000)
+
+    v = venn2_wordcloud([set(left['search']), set(right['search'])], 
+                        set_labels=[left_label, right_label], 
+                        alpha=1,
+                        ax=ax, 
+                        wordcloud_kwargs=dict(font_path='fonts/Yahoo Sans-Regular.otf', prefer_horizontal=1, max_words=30, color_func=lambda *args, **kwargs: "white"))
+
+    v.get_patch_by_id('10').set_color('#FF0080')
+    v.get_patch_by_id('11').set_color('#7E1FFF')
+    v.get_patch_by_id('01').set_color('#11D3CD')
+
+    for label in v.set_labels:
+        label.set_fontsize(12.)
+
+    # Left Text
+    fig_text(x=0.10, y=0.7, 
+    s=f"""Words popular  
+    with <{left_label}>""",
+            highlight_textprops=[{'color':'#FF0080', 'weight':'bold'}],
+            weight='regular', fontfamily='Yahoo Sans', fontsize=6, ha='center')
+
+    # Right Text
+    fig_text(x=0.9, y=0.7, 
+    s=f"""Words popular 
+    with <{right_label}>""",
+            highlight_textprops=[{'color':'#11D3CD', 'weight':'bold'}],
+            weight='regular', fontfamily='Yahoo Sans', fontsize=6, ha='center')
+
+    plt.savefig('images/venn_cloud.png', dpi=1000, transparent=True)
+
+    return fig 
+
+
+# TIME SERIES
+
+def research_dates(df):
+        return (df['date'].dt.date.min().strftime('%-d %b %Y'), df['date'].dt.date.max().strftime('%-d %b %Y'))
+
+
+def is_spring_summer(ds):
+    dt = pd.to_datetime(ds)
+    return dt.quarter == 2 | dt.quarter == 3
+
+
+def holiday_cleanup(ser):
+        return (ser.str.replace('[England/Wales/Northern Ireland]', '', regex=False)
+                .str.replace(' [Northern Ireland]', '', regex=False)
+        )
+
+@st.experimental_memo(persist='disk')
+def holiday_impact_plot(df):
+    fig, ax = plt.subplots(figsize=(6,3), dpi=1000)
+
+    sns.set(font='Yahoo Sans', style='white')
+    df['holiday_impact'] = df['holiday_impact'] * 100
+    df.query('holiday in @holiday_selected').plot(x='holiday', y='holiday_impact', color=df['holiday_impact'].ge(0).map({True: '#7E1FFF', False:'lightgrey'}), kind='barh', width=1, ax=ax)
+
+    # Labels
+    ax.set_ylabel('')
+    ax.set_xlabel('% lift in searches', fontsize=6, fontweight='bold')
+    ax.tick_params(axis='both', which='both', bottom=False, top=False, left=False, labelsize=5, pad=0)
+
+    # Spines
+    sns.despine(left=True, bottom=False)
+
+    for direction in ['bottom', 'left']:
+        ax.spines[direction].set_lw(0.2)
+        ax.spines[direction].set_color('grey')
+        ax.spines[direction].set_alpha(0.5)
+    
+    ax.grid(which='major', axis='x', dashes=(1,3), zorder=4, color='gray', ls=':', alpha=0.5, lw=0.2)
+    ax.grid(axis='y', visible=False)
+
+    # Titles
+    s = '% Lift in Searches by Holiday & Event'
+    s2 = 'The chart shows the <Positive> and <Negative> impact on searches during holidays' 
+    fig_text(0.05, 0.92, s, fontweight='extra bold', fontsize=12, va='bottom',  color='#6001D2')
+    fig_text(0.05, 0.89, s2, fontsize=6, va='bottom', highlight_textprops=[{"color": "#7E1FFF", "fontweight":'bold'},
+                                                                            {"color": "grey", "fontweight":"bold"}])
+
+    # Adjust axes positions to fit commentary
+    fig.subplots_adjust(top=0.85, left=0.05)
+
+    # Source
+    fig.supxlabel(f'Source: Yahoo Internal {market} \nData covers {research_start} - {research_end}', fontsize=4, x=0.9, y=-0.05, ha='right')
+    ax.get_legend().remove()
+    plt.savefig('images/holiday_impact.png', dpi=1000, transparent=True)
+
+    return fig
+
+
+@st.experimental_memo(persist='disk')
+def weekly_impact_plot(df):
+        days = [ 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+        
+        weekly_impact = (df_seasonality
+                    .groupby('dayofweek')
+                    .agg(ss=('weekly_springsummer', 'sum'),
+                        aw=('weekly_autumnwinter', 'sum'),
+                        pred=('yhat', 'sum'))
+                    .reindex(days)
+                    .assign(ss_impact=lambda df: df['ss'] / df['pred'] * 100,
+                            aw_impact=lambda df: df['aw'] / df['pred'] * 100)
+                    .reset_index())
+                    
+        seasonal_impact = (weekly_impact.melt(id_vars='dayofweek', var_name='season', value_vars=['ss_impact', 'aw_impact'], value_name='impact'))  
+
+        sns.set(font='Yahoo Sans', style='white')
+        fig, ax = plt.subplots(figsize=(6,3), dpi=1000)
+        sns.barplot(x='dayofweek', y='impact', hue='season', palette=['#7E1FFF', 'lightgrey'], lw=0, ec='black', data=seasonal_impact, ax=ax);
+
+        # Labels
+        ax.xaxis.set_ticks_position('top')
+        ax.set_xlabel('')
+        ax.set_ylabel('% lift in searches', fontsize=6, fontweight='bold')
+        ax.tick_params(axis='x', which='both', bottom=False, top=False, left=False, labelsize=5, labeltop=True, pad=-10)
+        ax.tick_params(axis='y', which='both', bottom=False, top=False, left=False, labelsize=5, labeltop=True, pad=0)
+        yticks = ax.get_yticks()
+
+        # Spines
+        sns.despine(left=True, bottom=True)
+
+        for direction in ['bottom', 'left']:
+                ax.spines[direction].set_lw(0.2)
+                ax.spines[direction].set_color('grey')
+                ax.spines[direction].set_alpha(0.5)
+
+        ax.grid(which='major', axis='y', dashes=(1,3), zorder=4, color='gray', ls=':', alpha=0.5, lw=0.2)
+        ax.grid(axis='x', visible=False)
+
+        # Title
+        s = '% Lift in Searches by Day of Week'
+        s2 = 'The chart shows weekday impact during the <Spring/Summer> and <Autumn/Winter> after accounting for public holidays' 
+        fig_text(0.05, 0.92, s, fontweight='extra bold', fontsize=12, va='bottom',  color='#6001D2')
+
+        fig_text(0.05, 0.89, s2, fontsize=6, va='bottom', highlight_textprops=[{"color": "#7E1FFF", "fontweight":'bold'},
+                                                                                {"color": "lightgrey", "fontweight":"bold"}])
+
+        
+        # Caption
+        fig.supxlabel(f'Source: Yahoo Internal - {market} \nData covers {research_start} - {research_end}', fontsize=4, x=0.9, ha='right')
+
+        # Custom Grouping Aesthetics
+        for day in range(7):
+                ax.plot([day - 0.45, day + 0.45], [yticks[-1], yticks[-1]], color='black', lw=0.5)
+
+        ax.get_legend().remove()
+
+        # Adjust axes positions to fit commentary
+        pos1 = ax.get_position() # get the original position 
+        pos2 = [pos1.x0, pos1.y0 - 0.05,  pos1.width, pos1.height]
+        ax.set_position(pos2)
+
+        plt.savefig('images/weekly_impact.png', dpi=1000, transparent=True)
+
+        return fig
+
+
+# AUTOCORRELATION
+@st.experimental_memo(persist='disk')
+def autocorr_plot(ser, days=50):
+    font = {'family' : 'Yahoo Sans', 'weight':'regular'}
+    plt.rc('font', **font)
+
+    fig, ax = plt.subplots(figsize=(6,3))
+    daily_queries = df.groupby('date').size()
+    plot_acf(x=daily_queries, 
+            lags=days, 
+            ax=ax, 
+            use_vlines=True,
+            missing='conservative',
+            zero=False,
+            auto_ylims=True,
+            title="",
+            vlines_kwargs={"colors": "#7E1FFF"})
+    
+    for item in ax.collections:
+        if type(item)==PolyCollection:
+            item.set_facecolor('#7E1FFF') #7E1FFF
+
+        if type(item)==LineCollection:
+            item.set_facecolor('#7E1FFF')
+    
+    for item in ax.lines:
+        item.set_color('#7E1FFF')
+
+
+    # Axes
+    ax.set_xlabel("Days Lag", fontweight='bold', fontsize=8)
+    ax.set_ylabel('Correlation', fontweight='bold', fontsize=8)
+    ax.tick_params(axis='both', which='both', bottom=False, left=False, labelsize=8, pad=0)
+    # Title
+    s = 'Autocorrelation of searches'
+    fig_text(0.05, 0.95, s, fontweight='extra bold', fontsize=14, va='bottom', color='#6001D2')
+
+    # Caption
+    fig.supxlabel(f'Source: Yahoo Internal - {market} \nData covers {research_start} - {research_end}', fontsize=4, x=0.9, y=-0.05, ha='right')
+
+    # Aesthetics
+    for direction in ['bottom', 'left']:
+        ax.spines[direction].set_lw(0.2)
+        ax.spines[direction].set_color('grey')
+        ax.spines[direction].set_alpha(0.5)
+    sns.despine()
+        
+    
+    plt.savefig('images/autocorr.png', dpi=1000, transparent=True)
+    return fig
+
+# -------------------------------------------------------------------------------------------------------------------------------------
+# -------------------------------------------------------------------------------------------------------------------------------------
+# -------------------------------------------------------------------------------------------------------------------------------------
+
+
+# UPLOAD
+st.sidebar.markdown('# Upload data!')
+st.sidebar.markdown('The csv or xls should have a column each for date, the search query, age group and gender')
+uploaded_file = st.sidebar.file_uploader(label='csv only please', type='csv')
+
+# ADD STOPWORDS
+st.sidebar.markdown("""# Stopwords
+Insert any stopwords below. These will be excluded from Topic Modelling & WordCloud analysis.""")
+custom_stopwords = st.sidebar.text_input(label='Separate each word with a space.')
+stopwords = stopwords.words('english')
+stopwords.extend(custom_stopwords.split())
+
+
+# Load default data
+st.subheader('Welcome to the NLP tool. Upload your search data on the left or load a demo dataset to get started')
+
+df = None
+ 
+if uploaded_file is not None:
+    st.sidebar.markdown('# Setup')
+    df = pd.read_csv(uploaded_file)
+    cols = df.columns.to_list()
+
+    # Choose Correct Columns
+    search = st.sidebar.selectbox('Which column are your queries in?', cols)
+    date = st.sidebar.selectbox('Which column are your dates in?', cols)
+    age = st.sidebar.selectbox('Which column is age in?', cols)
+    gender = st.sidebar.selectbox('Which column is gender in?', cols)
+    market = st.sidebar.text_input('What market should we source the slides as?')
+
+    df = clean_df(df)
+    df_questions = df.copy()
+        
+elif st.button('Load example dataset'):
+    df = pd.read_csv('raw data/demo data.csv')
+    df['date'] = pd.to_datetime(df['date'], format='%d/%m/%Y')
+    df_questions = df.copy()
+    market = 'UK'
+    
+
+if df is not None:
+    # nlp = spacy.load('en_core_web_sm')
+
+    # Model Selection
+    def format_func(option):
+        return SELECTION[option]
+
+    SELECTION = {'en_core_web_sm':'english', 'es_core_news_sm':'spanish', 'pt_core_news_sm':'portuguese'}
+    user_language = st.sidebar.selectbox('Select language for Topic Model', ['english', 'multilingual'], index=0, help='Multilingual provides support for 100+ languages, though will take a little longer to run.')
+    spacy_model = st.sidebar.selectbox('Select language for Wordclouds', options=list(SELECTION.keys()), format_func=format_func, index=0)
+    # spacy_model = st.sidebar.selectbox("Model name", ["en_core_web_sm", "es_core_news_sm", "pt_core_news_sm"], index=0)
+    nlp = load_model(spacy_model)
+
+    df['search'] = df['search'].apply(lambda row: ' '.join([word for word in row.split() if word not in (stopwords)]))
+
+    # Get start, end dates and sourcing for sourcing
+    research_start = df['date'].dt.date.min().strftime('%-d %b %Y')
+    research_end = df['date'].dt.date.max().strftime('%-d %b %Y')
+    timeframe_min = df['date'].dt.date.min()
+    timeframe_max = df['date'].dt.date.min()
+
+    with st.expander(label='Data Preview'):
+        st.subheader('Preview of upload')
+        st.write(df.head(10))
+
+# DEMOGRAPHIC---------------------------------------------------------------------------------------------------
+    
+    st.header('Demographic Profile') 
+
+    # Demographic Selection
+    ages = df.query('age not in ["unknown", "Unknown", "Below13", "13-17"]')['age'].unique().tolist()
+    genders = df.query('gender not in ["unknown", "-1", -1]')['gender'].unique().tolist()
+
+    # User Selectable Configuration
+    with st.expander(label='Configure Chart'):
+        with st.form(key='demokey'):
+            age_selection = st.multiselect('Select Age', ages, default=ages)
+            gender_selection = st.multiselect('Select Gender', genders, default=genders)
+            st.form_submit_button('Submit Choices') 
+
+    st.pyplot(demo_barplot(df), dpi=600)
+
+    # Download Button
+    with open("images/demo_barplot.png", "rb") as file:
+        btn = st.download_button(
+            label="Download demo slide",
+            data=file,
+            file_name="demo_barplot.png",
+            mime="image/png")
+
+
+
+    # TOPIC MODELLING---------------------------------------------------------------------------------------------------
+    
+    st.header('Topic Model') #// TODO Topic model
+
+    # Create topic model 
+    topic_model, topics = get_topic_model(df)
+
+    # Get list of topics and assign a new column with cleaned up topic names
+    topic_list = topic_model.get_topic_info()
+    topic_list = topic_list.assign(Description=topic_list['Name'].str.split("_", ).str[1:3].str.join(", ")).drop(columns=['Count'])
+
+    with st.expander(label='Show topics'):
+        st.write(topic_list.query('Topic >= 0'))
+
+    # Plot Topic Map
+    topic_map = get_topic_map(topic_model)
+    st.plotly_chart(topic_map)
+
+
+    st.header('Dendrogram') 
+    
+    st.markdown("""The dendrogram provides a way of seeing how the topics can be clustered together when based on **semantic similarity** - i.e they share a lot of words and themes. 
+    The below explanation shows how the topic map directly translates into a dendrogram. """)
+    st.image('images/dendrogram_explanation.png')
+    
+    # Plot Denodrogram
+    yahoo_palette_strict = "#6001D2 #FFA700 #1AC567 #0F69FF #FF0080 #11D3CD #C7CDD2 #828A93".split()
+    fig_dendro = visualize_hierarchy(topic_model, orientation='bottom')
+    st.plotly_chart(fig_dendro)
+
+
+    st.header('Topics by Age') #// TODO Topic by age
+    st.header('Topics by Gender') #// TODO Topic by gender
+
+    
+    # Plot Topic Timeseries (FacetGrid)
+    fig_topic_facet = topic_facet(df['search'], topics, df['date'])
+    st.pyplot(fig_topic_facet)
+
+    # Download Button
+    with open("images/topic_time.png", "rb") as file:
+        btn = st.download_button(
+            label="Download slide",
+            data=file,
+            file_name="topic_time.png",
+            mime="image/png")
+
+
+    # SENTIMENT---------------------------------------------------------------------------------------------------
+
+    st.header('Sentiment Analysis')
+    st.markdown(
+        """
+    Searches with no sentiment expressed (i.e. **Neutral**) are removed from the analysis, leaving just the relative weight of positive and negative searches. 
+    """)
+
+    # Assign Sentiment
+    df['score'] = df['search'].apply(sentiment_calc)
+    df['sentiment'] = pd.cut(df['score'], bins=[-1, -0.2, 0.2, 1],labels=['Negative', 'Neutral', 'Positive'])
+
     # Date Aggregation Selection
     def format_func(option):
         return CHOICES[option]
@@ -563,43 +842,10 @@ if df is not None:
     By default all searches are included, but you can specify a demographic using the filters below. 
     Any **stopwords** specified in the left hand navigation will apply to the WordCloud, so use this to remove unwanted words from the image. You will get more interesting results if you remove extremely common words. For instance, if your data is about Tesla, then the word Tesla isn't much use on it's own as it is self-evident. Adding Tesla as a stopword will upweight all of the other words made in conjunction with it, which is where the interesting insights are likely to be. 
     """)
-    # Colour format 
-    def purple(word=None, font_size=None,
-                        position=None, orientation=None,
-                        font_path=None, random_state=None):
-        h = 267 # 0 - 360
-        s = 99 # 0 - 100
-        l = random_state.randint(50, 80) # 0 - 100
-        return "hsl({}, {}%, {}%)".format(h, s, l)
 
+    # Add stopwords to the default spacy dictionary
     for word in custom_stopwords.split():
         nlp.Defaults.stop_words.add(word)
-
-    # @st.experimental_memo(persist='disk')
-    def create_wordcloud(df):
-        # Aesthetics
-        font = {'family' : 'Yahoo Sans', 'weight' : 'bold'}
-        plt.rc('font', **font)
-
-        # Create spaCy document and tokenise 
-        doc = process_text(spacy_model, " ".join(df.query('age in @age_selection and gender in @gender_selection')['search'].to_list()))
-        # doc = nlp(" ".join(df.query('age in @age_selection and gender in @gender_selection')['search'].to_list()))
-        tokens = [token.text for token in doc if not token.is_stop and not token.is_punct and token.pos_ in parts_option]
-        tokens = Counter(tokens)
-
-        # Instantiate wordcloud object
-        wc = WordCloud(background_color='white', 
-                color_func=purple,
-                collocations=True,
-                max_words=200,
-                width=1200, height=1000, prefer_horizontal=0.9)
-
-        wc = wc.generate_from_frequencies(tokens)
-        fig, ax = plt.subplots(figsize=(8,8))
-        ax.imshow(wc, interpolation='bilinear')
-        plt.axis('off')
-        plt.savefig('images/wordcloud.png', dpi=1000, transparent=True)
-        return fig
 
     # Create copy of dataframe for use in wordclouds
     df_words = df.copy()
@@ -630,75 +876,16 @@ if df is not None:
             mime="image/png")
 
 
-
     # VENN---------------------------------------------------------------------------------------------------
     st.header('Venn WordCloud')
     st.markdown("""The top 50 words used by each demographic are compared to create a venn diagram.""")
-
-    @st.experimental_memo(persist='disk')
-    def venn_intersections(df_words):
-        # Create both circles based on user selection
-        left_venn = df_words.query('gender in @gender_selection1 & age in @age_selection1')
-        right_venn = df_words.query('gender in @gender_selection2 & age in @age_selection2')
-
-        # left spacy doc 
-        doc1 = process_text(spacy_model, " ".join(left_venn['search'].to_list()))
-        left = [token.text.capitalize() for token in doc1 if not token.is_stop and not token.is_punct and token.pos_ in parts_option]
-        left = Counter(left).most_common(40)
-
-        # right spacy doc
-        doc2 = process_text(spacy_model, " ".join(right_venn['search'].to_list()))
-        right = [token.text.capitalize() for token in doc2 if not token.is_stop and not token.is_punct and token.pos_ in parts_option]
-        right = Counter(right).most_common(40)
-        
-        # create data frames 
-        left = pd.DataFrame(left, columns=['search', 'count'])  
-        right = pd.DataFrame(right, columns=['search', 'count'])
-
-        return left, right
-
-
-    def venn_cloud(left, right):
-        fig, ax = plt.subplots(figsize=(6,5), dpi=1000)
-
-        v = venn2_wordcloud([set(left['search']), set(right['search'])], 
-                            set_labels=[left_label, right_label], 
-                            alpha=1,
-                            ax=ax, 
-                            wordcloud_kwargs=dict(font_path='fonts/Yahoo Sans-Regular.otf', prefer_horizontal=1, max_words=30, color_func=lambda *args, **kwargs: "white"))
-
-        v.get_patch_by_id('10').set_color('#FF0080')
-        v.get_patch_by_id('11').set_color('#7E1FFF')
-        v.get_patch_by_id('01').set_color('#11D3CD')
-
-        for label in v.set_labels:
-            label.set_fontsize(12.)
-
-        # Left Text
-        fig_text(x=0.10, y=0.7, 
-        s=f"""Words popular  
-        with <{left_label}>""",
-                highlight_textprops=[{'color':'#FF0080', 'weight':'bold'}],
-                weight='regular', fontfamily='Yahoo Sans', fontsize=6, ha='center')
-
-        # Right Text
-        fig_text(x=0.9, y=0.7, 
-        s=f"""Words popular 
-        with <{right_label}>""",
-                highlight_textprops=[{'color':'#11D3CD', 'weight':'bold'}],
-                weight='regular', fontfamily='Yahoo Sans', fontsize=6, ha='center')
-
-        plt.savefig('images/venn_cloud.png', dpi=1000, transparent=True)
-
-        return fig 
-
     
     # Demographic Selection
     venn_ages = df['age'].unique().tolist()
     venn_genders = df['gender'].unique().tolist()
     venn_parts = ['ADJ', 'NOUN', 'VERB', 'PRON']
 
-    # Columns
+    # Create a column for each venn configuration
     col1, col2 = st.columns(2)
 
     # Left Circle
@@ -720,10 +907,7 @@ if df is not None:
                 right_label = st.text_input('Label for right circle', value='Male')
                 st.form_submit_button('Submit Choice') 
 
-    # Parts of Speech
-    
-
-    # Plot Wordcloud
+    # Plot Venn Cloud
     left, right = venn_intersections(df_words)
     fig_venn = venn_cloud(left, right)
     st.pyplot(fig_venn, dpi=1000)
@@ -740,7 +924,8 @@ if df is not None:
     st.header('Aspect or Search Intent') # // TODO Aspect or search intent
     st.header('Entity Recognition') #// TODO NER
 
-        # THE QUESTIONS---------------------------------------------------------------------------------------------------
+
+    # THE QUESTIONS---------------------------------------------------------------------------------------------------
 
     st.header('Questions')
     st.markdown("""
@@ -776,18 +961,9 @@ if df is not None:
     st.markdown("""These plots show the lift in searches for given days of the week, public holidays and custom dates. 
     This is done by decomposing the provided data into three compontents (trend, seasonality & noise) to better understand patterns in the data. """)
 
-
-    def research_dates(df):
-        return (df['date'].dt.date.min().strftime('%-d %b %Y'), df['date'].dt.date.max().strftime('%-d %b %Y'))
-
-
-    def is_spring_summer(ds):
-        dt = pd.to_datetime(ds)
-        return dt.quarter == 2 | dt.quarter == 3
-
+    # Read in custom holidays file
     holidays = pd.read_csv('raw data/custom_holidays.csv')
     holidays['ds'] = pd.to_datetime(holidays['ds'], format='%d/%m/%Y')
-
 
     def format_func_country(option):
         return COUNTRY_CHOICES[option]
@@ -833,6 +1009,8 @@ if df is not None:
 
     forecast = m.predict(future)
     cols = ['ds', 'holidays', 'weekly_springsummer', 'weekly_autumnwinter', 'yhat']
+
+    # Concat dataframes to create one which contains forecast, actuals & impact by holiday
     df_seasonality = (pd.concat([forecast[cols], df_prophet['y']], axis='columns')
                         .dropna()
                         .assign(holiday_impact=lambda df: df['holidays'] / df['y'],
@@ -840,12 +1018,6 @@ if df is not None:
                                         aw_weeklyimpact=lambda df: df['weekly_autumnwinter'] / df['y'],
                                         dayofweek=lambda df: df['ds'].dt.day_name(),
                                         weekday=lambda df: df['ds'].dt.dayofweek))
-
-
-    def holiday_cleanup(ser):
-        return (ser.str.replace('[England/Wales/Northern Ireland]', '', regex=False)
-                .str.replace(' [Northern Ireland]', '', regex=False)
-        )
 
     df_holidays = (m.construct_holiday_dataframe(df_seasonality['ds'])
                     .assign(holiday=lambda df: holiday_cleanup(df['holiday']))
@@ -871,48 +1043,6 @@ if df is not None:
     holiday_selected = st.multiselect('Select & Deselect Holidays To Show In Chart', options=holiday_options, default=holiday_options)
 
 
-
-    @st.experimental_memo(persist='disk')
-    def holiday_impact_plot(df):
-        fig, ax = plt.subplots(figsize=(6,3), dpi=1000)
-
-        sns.set(font='Yahoo Sans', style='white')
-        df['holiday_impact'] = df['holiday_impact'] * 100
-        df.query('holiday in @holiday_selected').plot(x='holiday', y='holiday_impact', color=df['holiday_impact'].ge(0).map({True: '#7E1FFF', False:'lightgrey'}), kind='barh', width=1, ax=ax)
-
-        # Labels
-        ax.set_ylabel('')
-        ax.set_xlabel('% lift in searches', fontsize=6, fontweight='bold')
-        ax.tick_params(axis='both', which='both', bottom=False, top=False, left=False, labelsize=5, pad=0)
-
-        # Spines
-        sns.despine(left=True, bottom=False)
-
-        for direction in ['bottom', 'left']:
-            ax.spines[direction].set_lw(0.2)
-            ax.spines[direction].set_color('grey')
-            ax.spines[direction].set_alpha(0.5)
-        
-        ax.grid(which='major', axis='x', dashes=(1,3), zorder=4, color='gray', ls=':', alpha=0.5, lw=0.2)
-        ax.grid(axis='y', visible=False)
-
-        # Titles
-        s = '% Lift in Searches by Holiday & Event'
-        s2 = 'The chart shows the <Positive> and <Negative> impact on searches during holidays' 
-        fig_text(0.05, 0.92, s, fontweight='extra bold', fontsize=12, va='bottom',  color='#6001D2')
-        fig_text(0.05, 0.89, s2, fontsize=6, va='bottom', highlight_textprops=[{"color": "#7E1FFF", "fontweight":'bold'},
-                                                                                {"color": "grey", "fontweight":"bold"}])
-
-        # Adjust axes positions to fit commentary
-        fig.subplots_adjust(top=0.85, left=0.05)
-
-        # Source
-        fig.supxlabel(f'Source: Yahoo Internal {market} \nData covers {research_start} - {research_end}', fontsize=4, x=0.9, y=-0.05, ha='right')
-        ax.get_legend().remove()
-        plt.savefig('images/holiday_impact.png', dpi=1000, transparent=True)
-
-        return fig
-
     # Plot Holiday Impact
     fig_holiday = holiday_impact_plot(holiday_impact)
     st.pyplot(fig_holiday, dpi=1000)
@@ -927,72 +1057,6 @@ if df is not None:
 
     st.subheader('Day of Week Impact')
     st.markdown("""Conditional seasonality is used to split **A/W** and **S/S** as behaviours tend to differ in each.  Taking the average over the course of a year hides these differences.""")
-
-    @st.experimental_memo(persist='disk')
-    def weekly_impact_plot(df):
-            days = [ 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
-            
-            weekly_impact = (df_seasonality
-                        .groupby('dayofweek')
-                        .agg(ss=('weekly_springsummer', 'sum'),
-                            aw=('weekly_autumnwinter', 'sum'),
-                            pred=('yhat', 'sum'))
-                        .reindex(days)
-                        .assign(ss_impact=lambda df: df['ss'] / df['pred'] * 100,
-                                aw_impact=lambda df: df['aw'] / df['pred'] * 100)
-                        .reset_index())
-                        
-            seasonal_impact = (weekly_impact.melt(id_vars='dayofweek', var_name='season', value_vars=['ss_impact', 'aw_impact'], value_name='impact'))  
-
-            sns.set(font='Yahoo Sans', style='white')
-            fig, ax = plt.subplots(figsize=(6,3), dpi=1000)
-            sns.barplot(x='dayofweek', y='impact', hue='season', palette=['#7E1FFF', 'lightgrey'], lw=0, ec='black', data=seasonal_impact, ax=ax);
-
-            # Labels
-            ax.xaxis.set_ticks_position('top')
-            ax.set_xlabel('')
-            ax.set_ylabel('% lift in searches', fontsize=6, fontweight='bold')
-            ax.tick_params(axis='x', which='both', bottom=False, top=False, left=False, labelsize=5, labeltop=True, pad=-10)
-            ax.tick_params(axis='y', which='both', bottom=False, top=False, left=False, labelsize=5, labeltop=True, pad=0)
-            yticks = ax.get_yticks()
-
-            # Spines
-            sns.despine(left=True, bottom=True)
-
-            for direction in ['bottom', 'left']:
-                    ax.spines[direction].set_lw(0.2)
-                    ax.spines[direction].set_color('grey')
-                    ax.spines[direction].set_alpha(0.5)
-
-            ax.grid(which='major', axis='y', dashes=(1,3), zorder=4, color='gray', ls=':', alpha=0.5, lw=0.2)
-            ax.grid(axis='x', visible=False)
-
-            # Title
-            s = '% Lift in Searches by Day of Week'
-            s2 = 'The chart shows weekday impact during the <Spring/Summer> and <Autumn/Winter> after accounting for public holidays' 
-            fig_text(0.05, 0.92, s, fontweight='extra bold', fontsize=12, va='bottom',  color='#6001D2')
-
-            fig_text(0.05, 0.89, s2, fontsize=6, va='bottom', highlight_textprops=[{"color": "#7E1FFF", "fontweight":'bold'},
-                                                                                    {"color": "lightgrey", "fontweight":"bold"}])
-
-            
-            # Caption
-            fig.supxlabel(f'Source: Yahoo Internal - {market} \nData covers {research_start} - {research_end}', fontsize=4, x=0.9, ha='right')
-
-            # Custom Grouping Aesthetics
-            for day in range(7):
-                    ax.plot([day - 0.45, day + 0.45], [yticks[-1], yticks[-1]], color='black', lw=0.5)
-
-            ax.get_legend().remove()
-
-            # Adjust axes positions to fit commentary
-            pos1 = ax.get_position() # get the original position 
-            pos2 = [pos1.x0, pos1.y0 - 0.05,  pos1.width, pos1.height]
-            ax.set_position(pos2)
-
-            plt.savefig('images/weekly_impact.png', dpi=1000, transparent=True)
-
-            return fig
 
     # Plot Daily Impact
     fig_weekly = weekly_impact_plot(df_seasonality)
@@ -1013,56 +1077,6 @@ if df is not None:
     st.markdown("""These plots graphically summarise the strength of a relationship between any given day and that of a day at prior time steps (lags). An autocorrelation of **1** represents a perfect positive correlation, while **-1** represents a perfect negative correlation.
     The purple shaded area is the 95% confidence interval - anything within here shows no significant correlation.""")
 
-    @st.experimental_memo(persist='disk')
-    def autocorr_plot(ser, days=50):
-        font = {'family' : 'Yahoo Sans', 'weight':'regular'}
-        plt.rc('font', **font)
-
-        fig, ax = plt.subplots(figsize=(6,3))
-        daily_queries = df.groupby('date').size()
-        plot_acf(x=daily_queries, 
-                lags=days, 
-                ax=ax, 
-                use_vlines=True,
-                missing='conservative',
-                zero=False,
-                auto_ylims=True,
-                title="",
-                vlines_kwargs={"colors": "#7E1FFF"})
-        
-        for item in ax.collections:
-            if type(item)==PolyCollection:
-                item.set_facecolor('#7E1FFF') #7E1FFF
-
-            if type(item)==LineCollection:
-                item.set_facecolor('#7E1FFF')
-        
-        for item in ax.lines:
-            item.set_color('#7E1FFF')
-
-    
-        # Axes
-        ax.set_xlabel("Days Lag", fontweight='bold', fontsize=8)
-        ax.set_ylabel('Correlation', fontweight='bold', fontsize=8)
-        ax.tick_params(axis='both', which='both', bottom=False, left=False, labelsize=8, pad=0)
-        # Title
-        s = 'Autocorrelation of searches'
-        fig_text(0.05, 0.95, s, fontweight='extra bold', fontsize=14, va='bottom', color='#6001D2')
-
-        # Caption
-        fig.supxlabel(f'Source: Yahoo Internal - {market} \nData covers {research_start} - {research_end}', fontsize=4, x=0.9, y=-0.05, ha='right')
-
-        # Aesthetics
-        for direction in ['bottom', 'left']:
-            ax.spines[direction].set_lw(0.2)
-            ax.spines[direction].set_color('grey')
-            ax.spines[direction].set_alpha(0.5)
-        sns.despine()
-            
-        
-        plt.savefig('images/autocorr.png', dpi=1000, transparent=True)
-        return fig
-
     # Plot Autocorrelation
     days = st.slider(label='Number of days', min_value=10, max_value=370, step=10, value=50, format='%d', help='mailto:jamie.nathan@yahooinc')
     fig_autocorr = autocorr_plot(df['date'], days=days)
@@ -1075,6 +1089,3 @@ if df is not None:
             data=file,
             file_name="autocorr.png",
             mime="image/png")
-    
-
-    
