@@ -86,7 +86,7 @@ def clean_df(df: pd.DataFrame):
                     search=lambda df: df['search'].str.replace('_', ' ')
                                                   .str.replace('(\S{14,})|[^\w\s]|  +', '') 
                                                   .str.strip()
-                                                  .str.lower())).to_parquet()
+                                                  .str.lower()))
     return df
 
 
