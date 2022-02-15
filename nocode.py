@@ -6,6 +6,8 @@
 from concurrent.futures import process
 from matplotlib.collections import LineCollection, PolyCollection
 import streamlit as st
+import warnings
+warnings.filterwarnings("ignore")
 
 # Data Wrangling
 import numpy as np 
@@ -134,7 +136,7 @@ def demo_barplot(df):
 
     
 # TOPIC MODELLING
-@st.experimental_memo
+@st.experimental_memo(persist='disk')
 def get_topic_model(df):
     df['search'] = df['search'].apply(lambda row: ' '.join([word for word in row.split() if word not in (stopwords)]))
     topic_model = BERTopic(
@@ -279,8 +281,8 @@ def _plotly_topic_visualization(df: pd.DataFrame,
 
     return fig
 
-    
-@st.experimental_memo
+
+@st.experimental_memo(persist='disk')
 def get_topic_map(_topic_model):
     fig = topic_model.visualize_topics(width=1500, height=700) 
     fig.update_layout({
