@@ -38,6 +38,7 @@ import plotly.figure_factory as ff
 # NLP
 import spacy
 import nltk
+nltk.download('stopwords')
 from bertopic import BERTopic
 from nltk.corpus import stopwords
 from textblob import TextBlob
@@ -85,7 +86,7 @@ def clean_df(df: pd.DataFrame):
                     search=lambda df: df['search'].str.replace('_', ' ')
                                                   .str.replace('(\S{14,})|[^\w\s]|  +', '') 
                                                   .str.strip()
-                                                  .str.lower()))
+                                                  .str.lower())).to_parquet()
     return df
 
 
