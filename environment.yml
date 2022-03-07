@@ -63,6 +63,9 @@ dependencies:
   - zeromq=4.3.4=he49afe7_1
   - zlib=1.2.11=h9173be1_1013
   - pip:
+    - https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.2.0/en_core_web_sm-3.2.0.tar.gz#egg=en_core_web_sm
+    - https://github.com/explosion/spacy-models/releases/download/es_core_news_sm-3.2.0/es_core_news_sm-3.2.0.tar.gz#egg=es_core_news_sm
+    - https://github.com/explosion/spacy-models/releases/download/pt_core_news_sm-3.2.0/pt_core_news_sm-3.2.0.tar.gz#egg=pt_core_news_sm
     - altair==4.2.0
     - argon2-cffi==21.3.0
     - argon2-cffi-bindings==21.2.0
