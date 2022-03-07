@@ -36,6 +36,8 @@ from typing import List
 from sklearn.metrics.pairwise import cosine_similarity
 import plotly.graph_objects as go
 import plotly.figure_factory as ff
+from itertools import cycle
+
 
 # NLP
 import spacy
@@ -134,16 +136,17 @@ def demo_barplot(df):
 
         return fig
 
-    
+
 # TOPIC MODELLING
-@st.experimental_memo(persist='disk')
+#@st.experimental_memo(persist='disk')
 def get_topic_model(df):
     df['search'] = df['search'].apply(lambda row: ' '.join([word for word in row.split() if word not in (stopwords)]))
     topic_model = BERTopic(
                     language=user_language,
                     n_gram_range=(1,2), 
-                    nr_topics="auto",
-                    low_memory=True
+                    nr_topics=nr_topics,
+                    low_memory=True,
+                    calculate_probabilities=False
                     )
     topics, probs = topic_model.fit_transform(df['search'].to_list())
     return topic_model, topics
@@ -291,11 +294,37 @@ def get_topic_map(_topic_model):
 
     return fig
 
+def topic_bars(topic_model):
+    fig = topic_model.visualize_barchart(width=350, top_n_topics=16)
+    fig.update_xaxes(showgrid=False, tickfont=dict(size=10, color='black', family='Yahoo Sans Light'))
+    fig.update_yaxes(showgrid=False, tickfont=dict(size=14, color='black', family='Yahoo Sans Light'))
+    fig.update_layout(
+        plot_bgcolor='white',
+        grid_columns=3,
 
+        title={
+            'text': '<b>Topic Descriptions',
+            'y': 0.98,
+            'x': 0.2,
+            'xanchor': 'center',
+            'yanchor': 'top',
+            'font': dict(
+                size=50,
+                color="#6001D2",
+              family="Yahoo Sans")
+        })
+    
+    palette = cycle(['#39007D', '#6001D2', '#907CFF', '#003ABC', '#0F69FF', '#12A9FF', '#00873C', '#1AC567', '#21D87D', '#FFD333', '#FF0080', '#C7CDD2', '#828A93', '#2C363F', '#39007D', '#6001D2'])
 
+    for bar in fig.data:
+        bar.marker.color = next(palette)
+        bar.marker.opacity = 1
 
+    for title in fig['layout']['annotations']:
+        title['font'] = dict(family='Yahoo Sans', size=20)
+        title.font.color = next(palette)
 
-
+    return fig
 
 def visualize_hierarchy(topic_model,
                             orientation: str = "left",
@@ -329,7 +358,7 @@ def visualize_hierarchy(topic_model,
         fig = ff.create_dendrogram(distance_matrix,
                                 orientation=orientation,
                                 linkagefun=lambda x: linkage(x, "ward"),
-                                color_threshold=1.5,
+                                color_threshold=1,
                                 colorscale=yahoo_palette_strict)
 
         # Create nicer labels
@@ -395,7 +424,7 @@ def topic_facet(searches, topics, timestamps):
     # Create Dynamic Topic Model and Merge topic names for readability
     topics_over_time = (topic_model
                     .topics_over_time(df['search'], topics, timestamps=df['date'])
-                    .query('Topic >= 0')
+                    .query('Topic >= 0 and Topic < 16')
                     .sort_values(['Topic', 'Frequency'])
                     .merge(topic_list[['Topic', 'Name']], how='left', on='Topic')
                     .assign(Topic=lambda df: df['Topic'].astype(str).str.zfill(2))
@@ -468,6 +497,61 @@ def topic_facet(searches, topics, timestamps):
     plt.savefig('images/topic_time.png', transparent=True, dpi=1000)
     
     return g
+
+def topics_demo(df, topics):
+  # gender_classes = df['gender'].to_list()
+  age_classes = df.query('age not in ["unknown", "Unknown", "Below13", "13-17"]')['age'].unique().tolist()
+  topics_by_age = topic_model.topics_per_class(df['search'], topics, df['age'].to_list())
+  # topics_by_gender = topic_model.topics_per_class(df['search'], topics, gender_classes)
+  # topics_by_class = pd.concat([topics_by_age, topics_by_gender])
+
+  left_bars = (topics_by_age
+              .loc[topics_by_age['Class'] == "35-54"]
+              .query('Topic != -1')
+              .groupby(['Topic', 'Words'], as_index=False)
+              .agg({'Frequency':'sum'})
+              .sort_values('Frequency', ascending=False)
+              .head(15)
+              .sort_values('Frequency', ascending=False)
+              .assign(new_topic=(lambda df:df['Words'].str.split(',').str[0:2].str.join(',').astype('category')))
+  )
+
+  right_bars = (topics_by_age
+                .loc[topics_by_age['Class'] == "55+"]
+                .query('Topic != -1')
+                .groupby(['Topic', 'Words'], as_index=False)
+                .agg({'Frequency':'sum'})
+                .sort_values('Frequency', ascending=False)
+                .head(15)
+                .sort_values('Frequency', ascending=False)
+                .assign(new_topic=(lambda df:df['Words'].str.split(',').str[0:2].str.join(',').astype('category')))
+                )
+
+
+  fig, ax = plt.subplots(nrows=1, ncols=2, figsize=(6,3), dpi=600, tight_layout=True)
+  sns.set(font='Yahoo Sans', style='white', font_scale=0.5)
+  sns.barplot(x='Frequency', y='new_topic', data=left_bars, ax=ax[0], color=['#7E1FFF'], orient='h', dodge=False, order=left_bars['new_topic'])
+  sns.barplot(x='Frequency', y='new_topic', data=right_bars, ax=ax[1], color=['#C7CDD2'], orient='h', dodge=False, order=right_bars['new_topic'])
+
+  for plot in [0, 1]:
+    ax[plot].set(xlabel="", ylabel="")
+    ax[plot].tick_params(axis='both', which='both', bottom=False, top=False, right=False, left=False, labelsize=7, pad=-3)
+    ax[plot].set_yticklabels(ax[plot].get_yticklabels(), size = 5)
+    ax[plot].set_xticklabels("")
+
+  # Title
+  fig.text(x=0.12, y=0.95, s='Top Topics by Demographic', fontweight='extra bold', fontsize=16, va='bottom',  color='#6001D2')
+
+  # Sourcing
+  fig.supxlabel(f'Source: Yahoo Internal - {market} \nData covers {research_start} - {research_end}', fontsize=4, x=0.9,y=-0.2, ha='right')
+
+  plt.savefig('images/topic_barplot.png', transparent=True, dpi=1000, bbox_inches='tight')
+
+  sns.despine(left=True, bottom=True)
+
+  fig.subplots_adjust(top=0.80)
+
+  return fig
 
 
 # SENTIMENT
@@ -543,9 +627,11 @@ def create_wordcloud(df):
     plt.rc('font', **font)
 
     # Create spaCy document and tokenise 
+    nlp.max_length = 7000000
     doc = process_text(spacy_model, " ".join(df.query('age in @age_selection and gender in @gender_selection')['search'].to_list()))
     # doc = nlp(" ".join(df.query('age in @age_selection and gender in @gender_selection')['search'].to_list()))
     tokens = [token.text for token in doc if not token.is_stop and not token.is_punct and token.pos_ in parts_option]
+    entities = [(x.lemma_, x.label_) for x in doc.ents]
     tokens = Counter(tokens)
 
     # Instantiate wordcloud object
@@ -560,7 +646,7 @@ def create_wordcloud(df):
     ax.imshow(wc, interpolation='bilinear')
     plt.axis('off')
     plt.savefig('images/wordcloud.png', dpi=1000, transparent=True)
-    return fig
+    return fig, entities
 
 # VENN 
 
@@ -815,6 +901,13 @@ custom_stopwords = st.sidebar.text_input(label='Separate each word with a space.
 stopwords = stopwords.words('english')
 stopwords.extend(custom_stopwords.split())
 
+# LIMIT TOPICS
+st.sidebar.markdown("""# Limit Topics""")
+nr_topics = st.sidebar.select_slider('Limit the number of topics', 
+                            options=['auto', 20, 30, 40, 50, 60, 70, 80, 100, 125, 150, 200],
+                            value='auto',
+                            help='Auto is the default and chooses an optimum number of topics based on the dataset. But if it generates too many, feel free to choose a lower number. ')
+
 
 # Load default data
 st.subheader('Welcome to the NLP tool. Upload your search data on the left or load a demo dataset to get started')
@@ -850,7 +943,10 @@ if df is not None:
     def format_func(option):
         return SELECTION[option]
 
+    st.sidebar.markdown("# Language")
+
     SELECTION = {'en_core_web_sm':'english', 'es_core_news_sm':'spanish', 'pt_core_news_sm':'portuguese'}
+
     user_language = st.sidebar.selectbox('Select language for Topic Model', ['english', 'multilingual'], index=0, help='Multilingual provides support for 100+ languages, though will take a little longer to run.')
     spacy_model = st.sidebar.selectbox('Select language for Wordclouds', options=list(SELECTION.keys()), format_func=format_func, index=0)
     # spacy_model = st.sidebar.selectbox("Model name", ["en_core_web_sm", "es_core_news_sm", "pt_core_news_sm"], index=0)
@@ -910,6 +1006,8 @@ if df is not None:
         st.write(topic_list.query('Topic >= 0'))
 
     # Plot Topic Map
+
+    
     topic_map = get_topic_map(topic_model)
     st.plotly_chart(topic_map)
 
@@ -920,16 +1018,23 @@ if df is not None:
     The below explanation shows how the topic map directly translates into a dendrogram. """)
     st.image('images/dendrogram_explanation.png')
     
+
     # Plot Denodrogram
     yahoo_palette_strict = "#6001D2 #FFA700 #1AC567 #0F69FF #FF0080 #11D3CD #C7CDD2 #828A93".split()
+    yahoo_palette_strict = "#6001D2 #907CFF #12A9FF #1AC567 #FFDE00 #FF8B12 #C7CDD2 #6001D2".split()
+
     fig_dendro = visualize_hierarchy(topic_model, orientation='bottom')
     st.plotly_chart(fig_dendro)
 
 
-    st.header('Topics by Age') #// TODO Topic by age
-    st.header('Topics by Gender') #// TODO Topic by gender
+    # Plot Bar Charts 
+    #st.header('Topics by Age') #// TODO Topic by age
+    #st.header('Topics by Gender') #// TODO Topic by gender
 
-    
+
+    fig_barchart = topic_bars(topic_model)
+    st.plotly_chart(fig_barchart)
+
     # Plot Topic Timeseries (FacetGrid)
     fig_topic_facet = topic_facet(df['search'], topics, df['date'])
     st.pyplot(fig_topic_facet)
@@ -941,6 +1046,16 @@ if df is not None:
             data=file,
             file_name="topic_time.png",
             mime="image/png")
+
+    # Plot Demographic Topics
+    #age_classes = df.query('age not in ["unknown", "Unknown", "Below13", "13-17"]')['age'].unique().tolist()
+    #topics_by_age = topic_model.topics_per_class(df['search'], topics, df['age'].to_list())
+    # topics_by_gender = topic_model.topics_per_class(df['search'], topics, gender_classes)
+    # topics_by_class = pd.concat([topics_by_age, topics_by_gender])
+
+    
+    #fig_demobar = topics_demo(df, topics)
+    #st.pyplot(fig)
 
 
     # SENTIMENT---------------------------------------------------------------------------------------------------
@@ -1005,7 +1120,7 @@ if df is not None:
             st.form_submit_button('Submit Choices') 
 
     # Plot Wordcloud
-    fig_wordcloud = create_wordcloud(df_words)
+    fig_wordcloud, entities = create_wordcloud(df_words)
     st.pyplot(fig_wordcloud, dpi=1000)
 
     # Download Button
@@ -1016,6 +1131,57 @@ if df is not None:
             file_name="wordcloud.png",
             mime="image/png")
 
+    # ENTITIES-----------------------------------------------------------------------------------------------
+    st.header('Person & Influencer Recognition')
+    st.markdown('using **Named Entity Recognition**, we try to extract the people and companies that are prominent in the queries.')
+    
+    entities = pd.DataFrame(entities).rename(columns={0:"entity", 1:"label"})
+
+    people = (entities
+                .query('label == "PERSON"')
+                .groupby('entity').count()
+                .reset_index()
+                .nlargest(50, 'label')
+                .drop(columns='label'))
+
+    
+    organisations = (entities
+                .query('label == "ORG"')
+                .groupby('entity').count()
+                .reset_index()
+                .nlargest(50, 'label')
+                .drop(columns='label'))
+    
+    norp = (entities
+                .query('label in ["NORP"]')
+                .groupby('entity').count()
+                .reset_index()
+                .nlargest(50, 'label')
+                .drop(columns='label'))
+
+    # events = (entities
+    #             .query('label in ["EVENT", "PRODUCT"]')
+    #             .groupby('entity').count()
+    #             .reset_index()
+    #             .nlargest(50, 'label')
+    #             .drop(columns='label'))
+
+    entcol1, entcol2, entcol3 = st.columns(3)
+
+    with entcol1:
+        st.subheader('People')
+        people
+    
+    with entcol2:
+        st.subheader('Organisations')
+        organisations
+
+    with entcol3:
+        st.subheader('National & Political')
+        norp
+
+
+    
 
     # VENN---------------------------------------------------------------------------------------------------
     st.header('Venn WordCloud')
@@ -1061,9 +1227,36 @@ if df is not None:
             file_name="venn_cloud.png",
             mime="image/png")
 
+    # ASPECT ANALYSIS
+    # st.header('Aspect Analysis') 
 
-    st.header('Aspect or Search Intent') # // TODO Aspect or search intent
-    st.header('Entity Recognition') #// TODO NER
+    # aspects = []
+    # for search in df['search'].tolist():
+    #     doc = nlp(search)
+    #     descriptive_term = ''
+    #     target = ''
+    #     for token in doc:
+    #         if token.dep_ == 'nsubj': #and token.pos_ == 'NOUN':
+    #             target = token.lemma_
+    #         if token.pos_ == 'ADJ':
+    #             prepend = ''
+    #             for child in token.children:
+    #                 if child.pos_ != 'ADV':
+    #                   continue
+    #                 prepend += child.text + ' '
+    #             descriptive_term = prepend + token.text
+    #     aspects.append({'aspect': target,
+    #         'description': descriptive_term})
+
+    # search_aspects = pd.DataFrame(aspects).query('aspect not in ["","-PRON-"] & description != ""')
+
+    # st.dataframe(search_aspects
+    #                 .groupby(['aspect', 'description'])
+    #                 .agg(count=('aspect','count'))
+    #                 .sort_values('count', ascending=False)
+    #                 .head(50)
+    #                 .reset_index()
+    #                 .filter(['aspect', 'description']), width=600, height=600)
 
 
     # THE QUESTIONS---------------------------------------------------------------------------------------------------
