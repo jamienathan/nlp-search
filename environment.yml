@@ -66,6 +66,10 @@ dependencies:
     - https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.2.0/en_core_web_sm-3.2.0.tar.gz#egg=en_core_web_sm
     - https://github.com/explosion/spacy-models/releases/download/es_core_news_sm-3.2.0/es_core_news_sm-3.2.0.tar.gz#egg=es_core_news_sm
     - https://github.com/explosion/spacy-models/releases/download/pt_core_news_sm-3.2.0/pt_core_news_sm-3.2.0.tar.gz#egg=pt_core_news_sm
+    - pystan==2.19.1.1
+    - holidays==0.11.3.1
+    - convertdate
+    - bertopic==0.9.4
     - altair==4.2.0
     - argon2-cffi==21.3.0
     - argon2-cffi-bindings==21.2.0
@@ -73,7 +77,6 @@ dependencies:
     - attrs==21.4.0
     - backports-zoneinfo==0.2.1
     - base58==2.1.1
-    - bertopic==0.9.4
     - bleach==4.1.0
     - blinker==1.4
     - blis==0.7.5
@@ -84,7 +87,6 @@ dependencies:
     - charset-normalizer==2.0.10
     - click==8.0.3
     - cmdstanpy==0.9.68
-    - convertdate==2.4.0
     - cycler==0.11.0
     - cymem==2.0.6
     - cython==0.29.27
@@ -98,7 +100,6 @@ dependencies:
     - hdbscan==0.8.27
     - highlight-text==0.2
     - hijri-converter==2.2.2
-    - holidays==0.11.3.1
     - huggingface-hub==0.4.0
     - idna==3.3
     - importlib-metadata==4.10.1
@@ -150,7 +151,6 @@ dependencies:
     - pynndescent==0.5.6
     - pyparsing==3.0.7
     - pyrsistent==0.18.1
-    - pystan==2.19.1.1
     - pytz==2021.3
     - pytz-deprecation-shim==0.1.0.post0
     - pyyaml==5.4.1
