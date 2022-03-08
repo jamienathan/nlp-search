@@ -10,11 +10,11 @@ dependencies:
   - backports.functools_lru_cache=1.6.4=pyhd8ed1ab_0
   - ca-certificates=2021.10.26=hecd8cb5_2
   - cctools_osx-64=949.0.1=hc7db93f_23
-  - clang=12.0.0=hecd8cb5_2
-  - clang-12=12.0.0=default_hfcad0e5_2
-  - clang_osx-64=12.0.0=h7ad7729_2
-  - clangxx=12.0.0=default_hfcad0e5_2
-  - clangxx_osx-64=12.0.0=he0c6f94_2
+  # - clang=12.0.0=hecd8cb5_2
+  # - clang-12=12.0.0=default_hfcad0e5_2
+  # - clang_osx-64=12.0.0=h7ad7729_2
+  # - clangxx=12.0.0=default_hfcad0e5_2
+  # - clangxx_osx-64=12.0.0=he0c6f94_2
   - compiler-rt=12.0.0=hd87ff74_2
   - compiler-rt_osx-64=12.0.0=hfb26b64_2
   - debugpy=1.5.1=py37hd8d24ac_0
