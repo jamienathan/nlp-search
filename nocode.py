@@ -285,7 +285,7 @@ def _plotly_topic_visualization(df: pd.DataFrame,
     return fig
 
 
-@st.experimental_memo(persist='disk')
+# @st.experimental_memo(persist='disk')
 def get_topic_map(_topic_model):
     fig = topic_model.visualize_topics(width=1500, height=700) 
     fig.update_layout({
@@ -417,7 +417,7 @@ def visualize_hierarchy(topic_model,
 
 
 
-@st.experimental_memo
+# @st.experimental_memo
 def topic_facet(searches, topics, timestamps):
     topic_list = topic_model.get_topic_info()
 
