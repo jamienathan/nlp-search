@@ -1360,11 +1360,13 @@ if df is not None:
 
     cols = ['ds', 'holidays', 'holiday_impact', 'yhat', 'y']
 
-    holiday_impact = (pd.concat([df_seasonality[cols].set_index('ds'), df_holidays], axis='columns')
-                        .reset_index()
-                        .query('holidays != 0')
-                        .dropna(subset=['holidays'])
-                        .fillna(''))
+    # holiday_impact = (pd.concat([df_seasonality[cols].set_index('ds'), df_holidays], axis='columns')
+    #                     .reset_index()
+    #                     .query('holidays != 0')
+    #                     .dropna(subset=['holidays'])
+    #                     .fillna(''))
+
+    holiday_impact = df_seasonality.merge(df_holidays.reset_index(), left_on='ds', right_on='ds')
 
     scot = holiday_impact['holiday'].str.contains("Scotland|Boyne")
 
